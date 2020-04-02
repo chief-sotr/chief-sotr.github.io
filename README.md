@@ -10,8 +10,6 @@ I develop my own photos, plant a lot things, read some books.
 
 Not really good with social media but you can find me <a href="http://www.instagram.com/kevinvillert">Instagram</a> and <a href="https://www.facebook.com/kevin.villert">Facebook</a> or simply shoot me an <a href="mailto:chief@sundayontheroof.com">email.
 
-<hr>
-
 ## My frameworks: 
 
 My mission is to discover a product/feature that is valuable, usable and feasible to solve human problems.
