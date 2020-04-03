@@ -33,3 +33,10 @@ No PM developed skills equally, as no team organization is created identical. Th
 - Super user: use the product obsessively that you will develop and nurture accurate instincts for the ways in which the product can and should improve human lives.
 - Janitor: Do as much of the dirty work as possible so everyone else doesn’t have to (QA, testing, legal, financing, meetings, etc.).
 - Inventor: must be of creative type, who can generate and churn through many ideas all at once, arrive at solutions to difficult and multi-faceted problems
+
+## My inspiration: 
+- The Lean Startup by Eric Ries. This book forces you how to rethink what success means by building a minimum viable product first and paying attention to the metrics that matter.
+- Start with Why by Simon Sinek. Why do you do what you do? That's the question each PM should ask to themself.
+- High Output Management by Andrew S. Grove. Read this book while in Grad schoole and it is still the best people management book out there. Some stories will feel dated, but try to envision the methodologies to our current world. 
+- Swipe to Unlock by Parth Detroja, Neel Mehta, Aditya Agashe. Very recent read and loved it. This is a primer for everyone and anyone that want to understand the morst recent product strategies and technologies. Lots of great scenarios.
+- The Tipping Point by Malcolm Gladwell. If you need to understand what a tipping point means as "the moment of critical mass, the threshold, the boiling point". It does a good job explaining the "mysterious" sociological changes that mark everyday life. 
