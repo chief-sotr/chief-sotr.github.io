@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>commuter</title>
+  <title>MTA Bus Tracker</title>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -51,19 +51,31 @@
       return Math.round((new Date(iso) - new Date()) / 60000);
     }
 
+    // Use namespace-wildcard lookup so MTA's xmlns="http://www.siri.org.uk/siri"
+    // doesn't silently break getElementsByTagName in strict XML parsers.
+    function getEls(el, tag) {
+      if (!el) return [];
+      const byNS = el.getElementsByTagNameNS("*", tag);
+      return byNS.length > 0 ? byNS : el.getElementsByTagName(tag);
+    }
     function xmlText(el, tag) {
-      return el?.getElementsByTagName(tag)?.[0]?.textContent?.trim() || null;
+      return getEls(el, tag)?.[0]?.textContent?.trim() || null;
     }
 
     function parseXML(xmlString) {
-      const doc = new DOMParser().parseFromString(xmlString, "application/xml");
-      return Array.from(doc.getElementsByTagName("MonitoredStopVisit")).map((v) => {
-        const mvj  = v.getElementsByTagName("MonitoredVehicleJourney")[0];
-        const call = v.getElementsByTagName("MonitoredCall")[0];
-        const dist = v.getElementsByTagName("Distances")[0];
+      // Try lenient text/xml first; fall back to application/xml
+      let doc = new DOMParser().parseFromString(xmlString, "text/xml");
+      if (doc.querySelector("parsererror")) {
+        doc = new DOMParser().parseFromString(xmlString, "application/xml");
+      }
+      const visits = getEls(doc, "MonitoredStopVisit");
+      return Array.from(visits).map((v) => {
+        const mvj  = getEls(v, "MonitoredVehicleJourney")[0];
+        const call = getEls(v, "MonitoredCall")[0];
+        const dist = getEls(v, "Distances")[0];
         const rawLine = xmlText(mvj, "PublishedLineName") || "";
         return {
-          line:                rawLine.replace("MTA NYCT_", "").trim(),
+          line:                rawLine.replace(/MTA NYCT_/i, "").trim(),
           destination:         xmlText(mvj,  "DestinationName") || rawLine,
           expectedArrival:     xmlText(call, "ExpectedArrivalTime"),
           aimedArrival:        xmlText(call, "AimedArrivalTime"),
@@ -78,8 +90,7 @@
       const color      = lineColor(bus.line);
       const isoTime    = bus.expectedArrival || bus.aimedArrival;
       const minutes    = isoTime ? minutesUntil(isoTime) : null;
-      if (minutes !== null && (minutes < 0 || minutes > 30)) return null;
-      const isImminent = minutes !== null && minutes <= 2;
+      const isImminent = minutes === null || minutes <= 2; // no time = arriving now
 
       return (
         <div style={{
@@ -121,11 +132,14 @@
                   fontFamily: "'DM Mono', monospace", fontWeight: 700,
                   fontSize: "24px", lineHeight: 1,
                   color: isImminent ? color : "#e8e8e8",
-                }}>{minutes === 0 ? "NOW" : minutes}</div>
+                }}>{minutes <= 0 ? "NOW" : minutes}</div>
                 {minutes > 0 && <div style={{ fontSize: "10px", color: "#444", fontFamily: "'DM Sans', sans-serif", marginTop: "2px" }}>min</div>}
               </>
             ) : (
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "13px", color: "#333" }}>–</div>
+              <div style={{
+                fontFamily: "'DM Mono', monospace", fontWeight: 700,
+                fontSize: "24px", lineHeight: 1, color,
+              }}>NOW</div>
             )}
           </div>
         </div>
@@ -166,9 +180,9 @@
 
       const visible = buses.filter((b) => {
         const iso = b.expectedArrival || b.aimedArrival;
-        if (!iso) return true;
+        if (!iso) return true;            // no time = approaching/at stop, always show
         const m = minutesUntil(iso);
-        return m >= 0 && m <= 30;
+        return m >= -1 && m <= 30;        // -1 tolerance for just-departed buses
       });
 
       return (
