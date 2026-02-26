@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MTA Bus Tracker</title>
+  <title>lowkey bus rider</title>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -119,7 +119,7 @@
             }}>→ {bus.destination}</div>
             {bus.presentableDistance && (
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "10px", color: "#444", marginTop: "2px" }}>
-                {bus.presentableDistance}{bus.stopsAway != null ? ` · ${bus.stopsAway} stop${bus.stopsAway !== 1 ? "s" : ""} away` : ""}
+                {bus.presentableDistance}{bus.stopsAway != null && !bus.presentableDistance?.toLowerCase().includes("stop") ? ` · ${bus.stopsAway} stop${bus.stopsAway !== 1 ? "s" : ""} away` : ""}
               </div>
             )}
           </div>
@@ -383,7 +383,7 @@
             borderTop: "1px solid #111", paddingTop: "20px", marginTop: "12px",
             fontFamily: "'DM Mono', monospace", fontSize: "10px",
             color: "#1e1e1e", textAlign: "center", letterSpacing: "1px",
-          }}>AUTO-REFRESHES EVERY 30 SECONDS · MTA BUSTIME API</div>
+          }}>AUTO-REFRESHES EVERY 30 SECONDS · MTA BUSTIME API · v1.0.0</div>
         </div>
       );
     }
