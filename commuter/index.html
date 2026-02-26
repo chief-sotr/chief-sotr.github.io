@@ -160,7 +160,7 @@
         try {
           const raw = `https://bustime.mta.info/api/siri/stop-monitoring.xml`
             + `?key=${API_KEY}&OperatorRef=MTA&MonitoringRef=${stopId}&MaximumStopVisits=20`;
-          const url = `https://corsproxy.io/?url=${encodeURIComponent(raw)}`;
+          const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(raw)}`;
           const res  = await fetch(url);
           const text = await res.text();
           setBuses(parseXML(text));
