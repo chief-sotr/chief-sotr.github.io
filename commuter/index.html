@@ -17,6 +17,14 @@
       0%, 100% { background: rgba(255,255,255,0.04); }
       50%       { background: rgba(255,255,255,0.09); }
     }
+    @keyframes urgentYellow {
+      0%, 100% { background: rgba(245,200,35,0.08); }
+      50%       { background: rgba(245,200,35,0.22); }
+    }
+    @keyframes urgentRed {
+      0%, 100% { background: rgba(255,60,60,0.10); }
+      50%       { background: rgba(255,60,60,0.28); }
+    }
     @keyframes blink {
       0%, 100% { opacity: 1; }
       50%       { opacity: 0.15; }
@@ -316,22 +324,35 @@
       const minutes    = isoTime ? minutesUntil(isoTime) : null;
       const isImminent = minutes === null || minutes <= 2;
 
+      // Urgency levels
+      const isRedAlert    = minutes !== null && minutes < 5;
+      const isYellowAlert = minutes !== null && minutes >= 5 && minutes <= 10;
+
+      const bgStyle = isRedAlert
+        ? { animation: "urgentRed 0.8s ease-in-out infinite" }
+        : isYellowAlert
+        ? { animation: "urgentYellow 1.2s ease-in-out infinite" }
+        : isImminent
+        ? { animation: "pulse 1.5s ease-in-out infinite" }
+        : { background: "rgba(255,255,255,0.025)", animation: "fadeIn 0.25s ease" };
+
+      const borderColor = isRedAlert ? "#ff3c3c" : isYellowAlert ? "#f5c823" : color;
+
       return (
         <div
           onClick={() => onOpenMap(bus)}
           style={{
             display: "flex", alignItems: "center", gap: "14px",
             padding: "13px 16px",
-            background: isImminent ? `${color}15` : "rgba(255,255,255,0.025)",
-            borderLeft: `3px solid ${color}`,
+            ...bgStyle,
+            borderLeft: `3px solid ${borderColor}`,
             borderRadius: "2px 8px 8px 2px",
             marginBottom: "8px",
-            animation: isImminent ? "pulse 1.5s ease-in-out infinite" : "fadeIn 0.25s ease",
             cursor: "pointer",
-            transition: "background 0.15s ease",
+            transition: "border-color 0.3s ease",
           }}
-          onMouseEnter={(e) => e.currentTarget.style.background = isImminent ? `${color}25` : "rgba(255,255,255,0.05)"}
-          onMouseLeave={(e) => e.currentTarget.style.background = isImminent ? `${color}15` : "rgba(255,255,255,0.025)"}
+          onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(1.15)"}
+          onMouseLeave={(e) => e.currentTarget.style.filter = "brightness(1)"}
         >
           {/* line badge */}
           <div style={{
@@ -362,7 +383,7 @@
                 <div style={{
                   fontFamily: "'DM Mono', monospace", fontWeight: 700,
                   fontSize: "24px", lineHeight: 1,
-                  color: isImminent ? color : "#e8e8e8",
+                  color: isRedAlert ? "#ff3c3c" : isYellowAlert ? "#f5c823" : isImminent ? color : "#e8e8e8",
                 }}>{minutes <= 0 ? "NOW" : minutes}</div>
                 {minutes > 0 && <div style={{ fontSize: "10px", color: "#444", fontFamily: "'DM Sans', sans-serif", marginTop: "2px" }}>min</div>}
               </>
