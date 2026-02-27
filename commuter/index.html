@@ -370,7 +370,29 @@
       );
     }
 
-    /* ── BusRow ──────────────────────────────────────────────── */
+    /* ── parse scheduled timetable XML ──────────────────────── */
+    function parseTimetableXML(xmlString) {
+      let doc = new DOMParser().parseFromString(xmlString, "text/xml");
+      if (doc.querySelector("parsererror"))
+        doc = new DOMParser().parseFromString(xmlString, "application/xml");
+      const visits = getEls(doc, "TimetabledStopVisit");
+      return Array.from(visits).map((v) => {
+        const mvj  = getEls(v, "MonitoredVehicleJourney")[0];
+        const call = getEls(v, "MonitoredCall")[0];
+        const rawLine = xmlText(mvj, "PublishedLineName") || "";
+        return {
+          line:        rawLine.replace(/MTA NYCT_/i, "").trim(),
+          destination: xmlText(mvj, "DestinationName") || rawLine,
+          aimedArrival: xmlText(call, "AimedArrivalTime"),
+          expectedArrival: null,
+          presentableDistance: null,
+          stopsAway: null,
+          vehicleLat: null,
+          vehicleLng: null,
+          isScheduled: true,
+        };
+      });
+    }
     function BusRow({ bus, onOpenMap }) {
       const color      = lineColor(bus.line);
       const isoTime    = bus.expectedArrival || bus.aimedArrival;
@@ -452,6 +474,70 @@
       );
     }
 
+    /* ── ScheduledBusRow ─────────────────────────────────────── */
+    function ScheduledBusRow({ bus }) {
+      const isoTime = bus.aimedArrival;
+      const minutes = isoTime ? minutesUntil(isoTime) : null;
+      if (minutes !== null && (minutes < -1 || minutes > 30)) return null;
+
+      return (
+        <div style={{
+          display: "flex", alignItems: "center", gap: "14px",
+          padding: "13px 16px",
+          background: "rgba(255,255,255,0.012)",
+          borderLeft: "3px solid #2a2a2a",
+          borderRadius: "2px 8px 8px 2px",
+          marginBottom: "8px",
+          opacity: 0.7,
+        }}>
+          {/* muted line badge */}
+          <div style={{
+            background: "#1e1e1e", color: "#444",
+            fontFamily: "'DM Mono', monospace", fontWeight: 700,
+            fontSize: "12px", padding: "5px 9px", borderRadius: "5px",
+            minWidth: "42px", textAlign: "center", flexShrink: 0, letterSpacing: "0.3px",
+            border: "1px solid #2a2a2a",
+          }}>{bus.line || "?"}</div>
+
+          {/* destination + offline badge */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: "'DM Sans', sans-serif", fontSize: "13px", color: "#555",
+              textTransform: "uppercase", letterSpacing: "0.4px",
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+            }}>→ {bus.destination}</div>
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: "4px",
+              marginTop: "4px",
+              background: "rgba(255,255,255,0.04)", border: "1px solid #2a2a2a",
+              borderRadius: "4px", padding: "2px 7px",
+            }}>
+              {/* offline clock icon */}
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "9px", color: "#444", letterSpacing: "1px", textTransform: "uppercase" }}>scheduled</span>
+            </div>
+          </div>
+
+          {/* countdown */}
+          <div style={{ textAlign: "right", flexShrink: 0 }}>
+            {minutes !== null ? (
+              <>
+                <div style={{
+                  fontFamily: "'DM Mono', monospace", fontWeight: 700,
+                  fontSize: "24px", lineHeight: 1, color: "#3a3a3a",
+                }}>{minutes <= 0 ? "NOW" : minutes}</div>
+                {minutes > 0 && <div style={{ fontSize: "10px", color: "#333", fontFamily: "'DM Sans', sans-serif", marginTop: "2px" }}>min</div>}
+              </>
+            ) : (
+              <div style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: "24px", lineHeight: 1, color: "#3a3a3a" }}>–</div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     /* ── StopPanel ───────────────────────────────────────────── */
     function StopPanel({ stopId, label, onRemove, onOpenMap }) {
       const [buses,       setBuses]       = useState([]);
@@ -464,11 +550,32 @@
         setLoading(true);
         setFetchError(null);
         try {
-          const raw = `https://bustime.mta.info/api/siri/stop-monitoring.xml`
-            + `?key=${API_KEY}&OperatorRef=MTA&MonitoringRef=${stopId}&MaximumStopVisits=20`;
-          const res  = await fetch(PROXY + encodeURIComponent(raw));
-          const text = await res.text();
-          setBuses(parseXML(text));
+          // Fetch real-time and timetable in parallel
+          const realtimeRaw   = `https://bustime.mta.info/api/siri/stop-monitoring.xml?key=${API_KEY}&OperatorRef=MTA&MonitoringRef=${stopId}&MaximumStopVisits=20`;
+          const timetableRaw  = `https://bustime.mta.info/api/siri/stop-timetable.xml?key=${API_KEY}&OperatorRef=MTA&MonitoringRef=${stopId}&MaximumStopVisits=20`;
+
+          const [rtRes, ttRes] = await Promise.all([
+            fetch(PROXY + encodeURIComponent(realtimeRaw)),
+            fetch(PROXY + encodeURIComponent(timetableRaw)),
+          ]);
+          const [rtText, ttText] = await Promise.all([rtRes.text(), ttRes.text()]);
+
+          const realtime  = parseXML(rtText);
+          const scheduled = parseTimetableXML(ttText);
+
+          // Merge: drop scheduled entries that already have a real-time match
+          // Match = same line + aimed arrival within 3 minutes of a real-time entry
+          const unmatched = scheduled.filter((s) => {
+            if (!s.aimedArrival) return false;
+            const sTime = new Date(s.aimedArrival).getTime();
+            return !realtime.some((r) => {
+              if (r.line !== s.line) return false;
+              const rTime = new Date(r.expectedArrival || r.aimedArrival || 0).getTime();
+              return Math.abs(sTime - rTime) <= 3 * 60 * 1000; // 3 min tolerance
+            });
+          });
+
+          setBuses([...realtime, ...unmatched]);
           setLastUpdated(new Date());
         } catch (e) {
           setFetchError(e.message);
@@ -483,12 +590,18 @@
         return () => clearInterval(t);
       }, [fetchData]);
 
-      const visible = buses.filter((b) => {
-        const iso = b.expectedArrival || b.aimedArrival;
-        if (!iso) return true;
-        const m = minutesUntil(iso);
-        return m >= -1 && m <= 30;
-      });
+      const visible = buses
+        .filter((b) => {
+          const iso = b.expectedArrival || b.aimedArrival;
+          if (!iso) return true;
+          const m = minutesUntil(iso);
+          return m >= -1 && m <= 30;
+        })
+        .sort((a, b) => {
+          const tA = new Date(a.expectedArrival || a.aimedArrival || 0).getTime();
+          const tB = new Date(b.expectedArrival || b.aimedArrival || 0).getTime();
+          return tA - tB;
+        });
 
       return (
         <div style={{ marginBottom: "28px", animation: "fadeIn 0.3s ease" }}>
@@ -537,7 +650,9 @@
             }}>{loading ? "Loading…" : "No buses within 30 min"}</div>
           ) : (
             visible.map((bus, i) => (
-              <BusRow key={i} bus={bus} onOpenMap={(tapped) => onOpenMap(tapped, visible.filter(b => b.line === tapped.line), stopId, tapped.line)} />
+              bus.isScheduled
+                ? <ScheduledBusRow key={i} bus={bus} />
+                : <BusRow key={i} bus={bus} onOpenMap={(tapped) => onOpenMap(tapped, visible.filter(b => b.line === tapped.line), stopId, tapped.line)} />
             ))
           )}
         </div>
@@ -667,7 +782,7 @@
             borderTop: "1px solid #111", paddingTop: "20px", marginTop: "12px",
             fontFamily: "'DM Mono', monospace", fontSize: "10px",
             color: "#1e1e1e", textAlign: "center", letterSpacing: "1px",
-          }}>AUTO-REFRESHES EVERY 30 SECONDS · MTA BUSTIME API · v1.2.0</div>
+          }}>AUTO-REFRESHES EVERY 30 SECONDS · MTA BUSTIME API · v1.3.0</div>
 
           {/* Map modal */}
           {mapData && <MapModal bus={mapData.bus} fleet={mapData.fleet} stopId={mapData.stopId} line={mapData.line} onClose={() => setMapData(null)} />}
