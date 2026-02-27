@@ -222,8 +222,9 @@
           iconAnchor: [6, 28],
         });
 
+        // OneBusAway requires MTA_ prefix on the stop ID
         fetch(PROXY + encodeURIComponent(
-          `https://bustime.mta.info/api/where/stop/${stopId}.json?key=${API_KEY}`
+          `https://bustime.mta.info/api/where/stop/MTA_${stopId}.json?key=${API_KEY}`
         ))
           .then(r => r.json())
           .then(data => {
@@ -234,8 +235,20 @@
             stopMarker.current = L.marker([lat, lng], { icon: stopIcon })
               .addTo(map)
               .bindPopup('<span style="font-family:DM Sans,sans-serif">Stop ' + stopId + '<\/span>');
+            // Re-fit bounds now that we have stop coords — fixes race condition
+            // where geolocation resolved before stop fetch completed
+            const points = [];
+            if (userMarker.current) {
+              const ul = userMarker.current.getLatLng();
+              points.push([ul.lat, ul.lng]);
+            }
+            if (bus.vehicleLat && bus.vehicleLng) points.push([bus.vehicleLat, bus.vehicleLng]);
+            points.push([lat, lng]);
+            if (points.length > 1 && leafletRef.current) {
+              leafletRef.current.fitBounds(L.latLngBounds(points), { padding: [80, 80], maxZoom: 17 });
+            }
           })
-          .catch(() => {}); // silently ignore if stop fetch fails
+          .catch((e) => console.warn("Stop fetch failed:", e));
 
         // Plot initial fleet
         plotFleet(fleet || [bus], bus);
