@@ -116,7 +116,9 @@
       const mapRef        = useRef(null);
       const leafletRef    = useRef(null);
       const userMarker    = useRef(null);
-      const fleetMarkers  = useRef([]); // track all bus markers so we can remove on refresh
+      const stopMarker    = useRef(null); // 🚏 bus stop pin
+      const fleetMarkers  = useRef([]);
+      const stopCoords    = useRef(null); // { lat, lng } cached after first fetch
       const color         = lineColor(bus.line);
       const [refreshing,  setRefreshing]  = useState(false);
       const [lastRefresh, setLastRefresh] = useState(null);
@@ -212,6 +214,29 @@
         // Default center: NYC fallback
         let defaultCenter = [40.6782, -73.9442]; // Brooklyn
 
+        // ── fetch stop coordinates and plot 🚏 marker ──────────
+        const stopIcon = L.divIcon({
+          className: "bus-pin-label",
+          html: '<div style="font-size:22px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.8));">🚏<\/div>',
+          iconSize: [28, 28],
+          iconAnchor: [6, 28],
+        });
+
+        fetch(PROXY + encodeURIComponent(
+          `https://bustime.mta.info/api/where/stop/${stopId}.json?key=${API_KEY}`
+        ))
+          .then(r => r.json())
+          .then(data => {
+            const lat = data?.data?.lat;
+            const lng = data?.data?.lon;
+            if (!lat || !lng) return;
+            stopCoords.current = { lat, lng };
+            stopMarker.current = L.marker([lat, lng], { icon: stopIcon })
+              .addTo(map)
+              .bindPopup('<span style="font-family:DM Sans,sans-serif">Stop ' + stopId + '<\/span>');
+          })
+          .catch(() => {}); // silently ignore if stop fetch fails
+
         // Plot initial fleet
         plotFleet(fleet || [bus], bus);
 
@@ -226,13 +251,12 @@
                 .addTo(map)
                 .bindPopup('<span style="font-family:DM Sans,sans-serif">You are here<\/span>');
 
-              // Fit view between user and the tapped bus only (not all fleet)
-              if (bus.vehicleLat && bus.vehicleLng) {
-                const bounds = L.latLngBounds(
-                  [latitude, longitude],
-                  [bus.vehicleLat, bus.vehicleLng]
-                );
-                map.fitBounds(bounds, { padding: [80, 80], maxZoom: 17 });
+              // Fit view: user + tapped bus + stop (whichever coords are available)
+              const points = [[latitude, longitude]];
+              if (bus.vehicleLat && bus.vehicleLng) points.push([bus.vehicleLat, bus.vehicleLng]);
+              if (stopCoords.current) points.push([stopCoords.current.lat, stopCoords.current.lng]);
+              if (points.length > 1) {
+                map.fitBounds(L.latLngBounds(points), { padding: [80, 80], maxZoom: 17 });
               }
             },
             () => {
@@ -786,7 +810,7 @@
             borderTop: "1px solid #111", paddingTop: "20px", marginTop: "12px",
             fontFamily: "'DM Mono', monospace", fontSize: "10px",
             color: "#1e1e1e", textAlign: "center", letterSpacing: "1px",
-          }}>AUTO-REFRESHES EVERY 30 SECONDS · MTA BUSTIME API · v1.3.0</div>
+          }}>AUTO-REFRESHES EVERY 30 SECONDS · MTA BUSTIME API · v1.4.0</div>
 
           {/* Map modal */}
           {mapData && <MapModal bus={mapData.bus} fleet={mapData.fleet} stopId={mapData.stopId} line={mapData.line} onClose={() => setMapData(null)} />}
