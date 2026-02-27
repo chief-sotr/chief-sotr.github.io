@@ -112,23 +112,66 @@
     }
 
     /* ── MapModal ────────────────────────────────────────────── */
-    function MapModal({ bus, fleet, onClose }) {
-      const mapRef      = useRef(null);
-      const leafletRef  = useRef(null);
-      const userMarker  = useRef(null);
-      const busMarker   = useRef(null);
-      const color       = lineColor(bus.line);
+    function MapModal({ bus, fleet, stopId, line, onClose }) {
+      const mapRef        = useRef(null);
+      const leafletRef    = useRef(null);
+      const userMarker    = useRef(null);
+      const fleetMarkers  = useRef([]); // track all bus markers so we can remove on refresh
+      const color         = lineColor(bus.line);
+      const [refreshing,  setRefreshing]  = useState(false);
+      const [lastRefresh, setLastRefresh] = useState(null);
 
-      // iOS Safari requires enableHighAccuracy:true to trigger the permission prompt
-      // and a generous timeout since GPS can be slow to lock on mobile
       const GEO_OPTS = { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 };
+
+      // ── plot fleet markers (called on load + refresh) ──────────
+      const plotFleet = useCallback((busArray, tappedBus) => {
+        const map = leafletRef.current;
+        if (!map) return;
+        // Remove existing bus markers
+        fleetMarkers.current.forEach(m => map.removeLayer(m));
+        fleetMarkers.current = [];
+
+        const busesWithCoords = busArray.filter(b => b.vehicleLat && b.vehicleLng);
+        busesWithCoords.forEach((b) => {
+          const isTapped = b.destination === tappedBus.destination && b.line === tappedBus.line;
+          const opacity  = isTapped ? "1" : "0.5";
+          const isoTime  = b.expectedArrival || b.aimedArrival;
+          const mins     = isoTime ? minutesUntil(isoTime) : null;
+          const timeLabel = mins === null || mins <= 0 ? "NOW" : mins + " min";
+          const html = '<div style="display:flex;align-items:center;justify-content:center;background:' + color + ';color:#0a0a0a;font-family:DM Mono,monospace;font-weight:700;font-size:11px;padding:5px 8px;border-radius:6px;box-shadow:0 3px 12px rgba(0,0,0,0.7);white-space:nowrap;position:relative;opacity:' + opacity + ';">' + b.line + '<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid ' + color + ';"><\/div><\/div>';
+          const icon = L.divIcon({ className: "bus-pin-label", html, iconSize: [52, 32], iconAnchor: [26, 38] });
+          const marker = L.marker([b.vehicleLat, b.vehicleLng], { icon })
+            .addTo(map)
+            .bindPopup('<b style="font-family:DM Sans,sans-serif">' + b.line + ' \u2192 ' + b.destination + '<\/b><br><span style="font-family:DM Mono,monospace;font-size:12px;color:#F5A623">' + timeLabel + '<\/span>');
+          fleetMarkers.current.push(marker);
+        });
+      }, [color]);
+
+      // ── refresh: re-fetch MTA and re-plot ──────────────────────
+      const refresh = useCallback(async () => {
+        if (refreshing) return;
+        setRefreshing(true);
+        try {
+          const raw = `https://bustime.mta.info/api/siri/stop-monitoring.xml`
+            + `?key=${API_KEY}&OperatorRef=MTA&MonitoringRef=${stopId}&MaximumStopVisits=20`;
+          const res  = await fetch(PROXY + encodeURIComponent(raw));
+          const text = await res.text();
+          const allBuses   = parseXML(text);
+          const freshFleet = allBuses.filter(b => b.line === line);
+          plotFleet(freshFleet, bus);
+          setLastRefresh(new Date());
+        } catch (e) {
+          console.error("Map refresh failed:", e);
+        } finally {
+          setRefreshing(false);
+        }
+      }, [refreshing, stopId, line, bus, plotFleet]);
 
       // Center map on user location
       const centerOnUser = useCallback(() => {
         if (!leafletRef.current) return;
         navigator.geolocation.getCurrentPosition((pos) => {
           leafletRef.current.setView([pos.coords.latitude, pos.coords.longitude], 17);
-          // Update user marker position if it exists
           if (userMarker.current) {
             userMarker.current.setLatLng([pos.coords.latitude, pos.coords.longitude]);
           }
@@ -165,23 +208,8 @@
         // Default center: NYC fallback
         let defaultCenter = [40.6782, -73.9442]; // Brooklyn
 
-        // Plot all buses in the fleet that have GPS coordinates
-        const busesWithCoords = (fleet || [bus]).filter(b => b.vehicleLat && b.vehicleLng);
-        busesWithCoords.forEach((b) => {
-          const isTapped = b === bus;
-          const opacity = isTapped ? "1" : "0.5";
-          const isoTime = b.expectedArrival || b.aimedArrival;
-          const mins = isoTime ? minutesUntil(isoTime) : null;
-          const timeLabel = mins === null || mins <= 0 ? "NOW" : mins + " min";
-          const fleetHtml = '<div style="display:flex;align-items:center;justify-content:center;background:' + color + ';color:#0a0a0a;font-family:DM Mono,monospace;font-weight:700;font-size:11px;padding:5px 8px;border-radius:6px;box-shadow:0 3px 12px rgba(0,0,0,0.7);white-space:nowrap;position:relative;opacity:' + opacity + ';">' + b.line + '<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid ' + color + ';"><\/div><\/div>';
-          const fleetIcon = L.divIcon({ className: "bus-pin-label", html: fleetHtml, iconSize: [52, 32], iconAnchor: [26, 38] });
-          const marker = L.marker([b.vehicleLat, b.vehicleLng], { icon: fleetIcon })
-            .addTo(map)
-            .bindPopup('<b style="font-family:DM Sans,sans-serif">' + b.line + ' \u2192 ' + b.destination + '<\/b><br><span style="font-family:DM Mono,monospace;font-size:12px;color:#F5A623">' + timeLabel + '<\/span>');
-          if (isTapped) {
-            busMarker.current = marker;
-          }
-        });
+        // Plot initial fleet
+        plotFleet(fleet || [bus], bus);
 
         // Request user location, center map on it at ~1 mile zoom (z=15)
         if (navigator.geolocation) {
@@ -289,12 +317,12 @@
           {/* Map */}
           <div style={{ position: "relative", flex: 1 }}>
             <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
-            {/* Floating center-on-me button */}
+            {/* Floating map controls */}
             <button
               onClick={centerOnUser}
               title="Center on my location"
               style={{
-                position: "absolute", bottom: "24px", right: "16px", zIndex: 1000,
+                position: "absolute", bottom: "80px", right: "16px", zIndex: 1000,
                 width: "44px", height: "44px",
                 background: "#0d0d0d", border: "1px solid #2a2a2a",
                 borderRadius: "50%", cursor: "pointer",
@@ -304,14 +332,39 @@
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4A90D9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="3"/>
-                <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
-                <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z" strokeOpacity="0"/>
                 <line x1="12" y1="2" x2="12" y2="5"/>
                 <line x1="12" y1="19" x2="12" y2="22"/>
                 <line x1="2" y1="12" x2="5" y2="12"/>
                 <line x1="19" y1="12" x2="22" y2="12"/>
               </svg>
             </button>
+            <button
+              onClick={refresh}
+              title="Refresh bus locations"
+              style={{
+                position: "absolute", bottom: "24px", right: "16px", zIndex: 1000,
+                width: "44px", height: "44px",
+                background: "#0d0d0d", border: "1px solid #2a2a2a",
+                borderRadius: "50%", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: "0 2px 12px rgba(0,0,0,0.6)",
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={refreshing ? "#555" : "#7EC8A0"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                style={{ transform: refreshing ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.5s ease" }}>
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+            </button>
+            {lastRefresh && (
+              <div style={{
+                position: "absolute", bottom: "14px", right: "68px", zIndex: 1000,
+                fontFamily: "'DM Mono', monospace", fontSize: "9px", color: "#333",
+                background: "rgba(0,0,0,0.7)", padding: "3px 7px", borderRadius: "4px",
+              }}>
+                {lastRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+              </div>
+            )}
           </div>
         </div>
       );
@@ -484,7 +537,7 @@
             }}>{loading ? "Loading…" : "No buses within 30 min"}</div>
           ) : (
             visible.map((bus, i) => (
-              <BusRow key={i} bus={bus} onOpenMap={(tapped) => onOpenMap(tapped, visible.filter(b => b.line === tapped.line))} />
+              <BusRow key={i} bus={bus} onOpenMap={(tapped) => onOpenMap(tapped, visible.filter(b => b.line === tapped.line), stopId, tapped.line)} />
             ))
           )}
         </div>
@@ -557,7 +610,7 @@
         catch { return []; }
       });
       const [now,       setNow]       = useState(new Date());
-      const [mapData,    setMapData]    = useState(null); // { bus, fleet }
+      const [mapData, setMapData] = useState(null); // { bus, fleet, stopId, line }
 
       useEffect(() => {
         const t = setInterval(() => setNow(new Date()), 10000);
@@ -605,7 +658,7 @@
                 stopId={stop.id}
                 label={stop.label}
                 onRemove={() => removeStop(i)}
-                onOpenMap={(bus, fleet) => setMapData({ bus, fleet })}
+                onOpenMap={(bus, fleet, stopId, line) => setMapData({ bus, fleet, stopId, line })}
               />
             ))
           )}
@@ -614,10 +667,10 @@
             borderTop: "1px solid #111", paddingTop: "20px", marginTop: "12px",
             fontFamily: "'DM Mono', monospace", fontSize: "10px",
             color: "#1e1e1e", textAlign: "center", letterSpacing: "1px",
-          }}>AUTO-REFRESHES EVERY 30 SECONDS · MTA BUSTIME API · v1.1.0</div>
+          }}>AUTO-REFRESHES EVERY 30 SECONDS · MTA BUSTIME API · v1.2.0</div>
 
           {/* Map modal */}
-          {mapData && <MapModal bus={mapData.bus} fleet={mapData.fleet} onClose={() => setMapData(null)} />}
+          {mapData && <MapModal bus={mapData.bus} fleet={mapData.fleet} stopId={mapData.stopId} line={mapData.line} onClose={() => setMapData(null)} />}
         </div>
       );
     }
