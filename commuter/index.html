@@ -111,12 +111,20 @@
       const busMarker   = useRef(null);
       const color       = lineColor(bus.line);
 
+      // iOS Safari requires enableHighAccuracy:true to trigger the permission prompt
+      // and a generous timeout since GPS can be slow to lock on mobile
+      const GEO_OPTS = { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 };
+
       // Center map on user location
       const centerOnUser = useCallback(() => {
         if (!leafletRef.current) return;
         navigator.geolocation.getCurrentPosition((pos) => {
           leafletRef.current.setView([pos.coords.latitude, pos.coords.longitude], 15);
-        });
+          // Update user marker position if it exists
+          if (userMarker.current) {
+            userMarker.current.setLatLng([pos.coords.latitude, pos.coords.longitude]);
+          }
+        }, null, GEO_OPTS);
       }, []);
 
       useEffect(() => {
@@ -185,13 +193,14 @@
               }
             },
             () => {
-              // Geolocation denied — just center on bus or Brooklyn
+              // Geolocation denied or failed — center on bus or Brooklyn
               if (bus.vehicleLat && bus.vehicleLng) {
                 map.setView([bus.vehicleLat, bus.vehicleLng], 15);
               } else {
                 map.setView(defaultCenter, 14);
               }
-            }
+            },
+            GEO_OPTS
           );
         } else {
           map.setView(defaultCenter, 14);
