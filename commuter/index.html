@@ -133,7 +133,9 @@
 
         const busesWithCoords = busArray.filter(b => b.vehicleLat && b.vehicleLng);
         busesWithCoords.forEach((b) => {
-          const isTapped = b.destination === tappedBus.destination && b.line === tappedBus.line;
+          const tappedTime = tappedBus.expectedArrival || tappedBus.aimedArrival;
+          const thisTime   = b.expectedArrival || b.aimedArrival;
+          const isTapped   = b.line === tappedBus.line && thisTime === tappedTime;
           const pinLabel = isTapped ? "🚌" : b.line;
           const isoTime  = b.expectedArrival || b.aimedArrival;
           const mins     = isoTime ? minutesUntil(isoTime) : null;
