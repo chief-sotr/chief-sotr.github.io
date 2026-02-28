@@ -37,6 +37,10 @@
       from { opacity: 0; }
       to   { opacity: 1; }
     }
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to   { transform: translateY(0); }
+    }
     input:focus { outline: none; border-color: #444 !important; }
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -120,8 +124,9 @@
       const fleetMarkers  = useRef([]);
       const stopCoords    = useRef(null); // { lat, lng } cached after first fetch
       const color         = lineColor(bus.line);
-      const [refreshing,  setRefreshing]  = useState(false);
-      const [lastRefresh, setLastRefresh] = useState(null);
+      const [refreshing,   setRefreshing]  = useState(false);
+      const [lastRefresh,  setLastRefresh] = useState(null);
+      const [sheetExpanded, setSheetExpanded] = useState(false);
       const isRefreshing  = useRef(false); // stable guard — avoids refresh() being recreated on state change
 
       const GEO_OPTS = { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 };
@@ -196,7 +201,7 @@
       useEffect(() => {
         // Init map
         const map = L.map(mapRef.current, {
-          zoomControl: true,
+          zoomControl: false,
           attributionControl: true,
         });
         leafletRef.current = map;
@@ -305,81 +310,55 @@
         };
       }, []);
 
-      const isoTime  = bus.expectedArrival || bus.aimedArrival;
-      const minutes  = isoTime ? minutesUntil(isoTime) : null;
+      const isoTime   = bus.expectedArrival || bus.aimedArrival;
+      const minutes   = isoTime ? minutesUntil(isoTime) : null;
       const timeLabel = minutes === null || minutes <= 0 ? "NOW" : `${minutes} min`;
+      const isImminent = minutes === null || minutes <= 2;
+      const isRedAlert    = minutes !== null && minutes < 5;
+      const isYellowAlert = minutes !== null && minutes >= 5 && minutes <= 10;
+      const etaColor = isRedAlert ? "#ff3c3c" : isYellowAlert ? "#f5c823" : isImminent ? color : "#e8e8e8";
+      const noGPS = (fleet || [bus]).filter(b => b.vehicleLat && b.vehicleLng).length === 0;
 
       return (
         <div style={{
           position: "fixed", inset: 0, zIndex: 1000,
-          background: "rgba(0,0,0,0.92)",
-          display: "flex", flexDirection: "column",
           animation: "modalIn 0.2s ease",
         }}>
-          {/* Modal header */}
+          {/* Full-screen map */}
+          <div ref={mapRef} style={{ position: "absolute", inset: 0 }} />
+
+          {/* ── Bottom-left: zoom buttons ── */}
           <div style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "16px 20px",
-            background: "#0d0d0d",
-            borderBottom: "1px solid #1a1a1a",
-            flexShrink: 0,
+            position: "absolute", bottom: 148, left: "16px", zIndex: 1002,
+            display: "flex", flexDirection: "column", gap: "8px",
           }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <div style={{
-                background: color, color: "#0a0a0a",
-                fontFamily: "'DM Mono', monospace", fontWeight: 700,
-                fontSize: "13px", padding: "6px 10px", borderRadius: "6px",
-              }}>{bus.line}</div>
-              <div>
-                <div style={{
-                  fontFamily: "'DM Sans', sans-serif", fontSize: "13px",
-                  color: "#999", textTransform: "uppercase", letterSpacing: "0.4px",
-                }}>→ {bus.destination}</div>
-                <div style={{
-                  fontFamily: "'DM Mono', monospace", fontSize: "11px",
-                  color: color, marginTop: "2px",
-                }}>{timeLabel}</div>
-              </div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              {/* Close button */}
-              <button onClick={onClose} title="Close" style={{
-                background: "transparent", border: "1px solid #2a2a2a",
-                borderRadius: "8px", padding: "8px 12px",
-                cursor: "pointer", color: "#555",
-                fontFamily: "'DM Mono', monospace", fontSize: "18px", lineHeight: 1,
-              }}>×</button>
-            </div>
-          </div>
-
-          {/* No location warning if no bus coords */}
-          {(fleet || [bus]).filter(b => b.vehicleLat && b.vehicleLng).length === 0 && (
-            <div style={{
-              background: "rgba(245,166,35,0.07)", borderBottom: "1px solid rgba(245,166,35,0.15)",
-              padding: "10px 20px",
-              fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#888",
-              flexShrink: 0,
-            }}>
-              ⚠ Real-time bus location not yet available for this trip
-            </div>
-          )}
-
-          {/* Map */}
-          <div style={{ position: "relative", flex: 1 }}>
-            <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
-            {/* Floating map controls */}
-            <button
-              onClick={centerOnUser}
-              title="Center on my location"
-              style={{
-                position: "absolute", bottom: "80px", right: "16px", zIndex: 1000,
+            {[{ label: "+", action: () => leafletRef.current?.zoomIn() },
+              { label: "−", action: () => leafletRef.current?.zoomOut() }
+            ].map(({ label, action }) => (
+              <button key={label} onClick={action} style={{
                 width: "44px", height: "44px",
-                background: "#0d0d0d", border: "1px solid #2a2a2a",
+                background: "rgba(13,13,13,0.92)", border: "1px solid #2a2a2a",
                 borderRadius: "50%", cursor: "pointer",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 boxShadow: "0 2px 12px rgba(0,0,0,0.6)",
-              }}
-            >
+                color: "#aaa", fontSize: "22px", fontFamily: "'DM Mono', monospace",
+                lineHeight: 1,
+              }}>{label}</button>
+            ))}
+          </div>
+
+          {/* ── Bottom-right: recenter + refresh ── */}
+          <div style={{
+            position: "absolute", bottom: 148, right: "16px", zIndex: 1002,
+            display: "flex", flexDirection: "column", gap: "8px",
+          }}>
+            <button onClick={centerOnUser} title="Center on my location" style={{
+              width: "44px", height: "44px",
+              background: "rgba(13,13,13,0.92)", border: "1px solid #2a2a2a",
+              borderRadius: "50%", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: "0 2px 12px rgba(0,0,0,0.6)",
+            }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4A90D9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="3"/>
                 <line x1="12" y1="2" x2="12" y2="5"/>
@@ -388,31 +367,118 @@
                 <line x1="19" y1="12" x2="22" y2="12"/>
               </svg>
             </button>
-            <button
-              onClick={refresh}
-              title="Refresh bus locations"
-              style={{
-                position: "absolute", bottom: "24px", right: "16px", zIndex: 1000,
-                width: "44px", height: "44px",
-                background: "#0d0d0d", border: "1px solid #2a2a2a",
-                borderRadius: "50%", cursor: "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: "0 2px 12px rgba(0,0,0,0.6)",
-              }}
-            >
+            <button onClick={refresh} title="Refresh bus locations" style={{
+              width: "44px", height: "44px",
+              background: "rgba(13,13,13,0.92)", border: "1px solid #2a2a2a",
+              borderRadius: "50%", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: "0 2px 12px rgba(0,0,0,0.6)",
+            }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={refreshing ? "#555" : "#7EC8A0"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
                 style={{ transform: refreshing ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.5s ease" }}>
                 <polyline points="23 4 23 10 17 10"/>
                 <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
               </svg>
             </button>
-            {lastRefresh && (
+          </div>
+
+          {/* ── Bottom sheet: route info + close ── */}
+          <div style={{
+            position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 1001,
+            background: "#0d0d0d",
+            borderTop: `2px solid ${color}`,
+            borderRadius: "20px 20px 0 0",
+            paddingBottom: "env(safe-area-inset-bottom, 16px)",
+            boxShadow: "0 -4px 32px rgba(0,0,0,0.7)",
+            animation: "slideUp 0.25s ease",
+          }}>
+            {/* Drag handle */}
+            <div onClick={() => setSheetExpanded(e => !e)} style={{
+              display: "flex", justifyContent: "center", padding: "12px 0 8px",
+              cursor: "pointer",
+            }}>
+              <div style={{ width: "36px", height: "4px", borderRadius: "2px", background: "#2a2a2a" }} />
+            </div>
+
+            {/* Main row: badge + destination + ETA + close */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: "14px",
+              padding: "0 20px 16px",
+            }}>
+              {/* Line badge */}
               <div style={{
-                position: "absolute", bottom: "14px", right: "68px", zIndex: 1000,
-                fontFamily: "'DM Mono', monospace", fontSize: "9px", color: "#333",
-                background: "rgba(0,0,0,0.7)", padding: "3px 7px", borderRadius: "4px",
+                background: color, color: "#0a0a0a",
+                fontFamily: "'DM Mono', monospace", fontWeight: 700,
+                fontSize: "14px", padding: "8px 12px", borderRadius: "8px",
+                flexShrink: 0, letterSpacing: "0.3px",
+              }}>{bus.line}</div>
+
+              {/* Destination + distance */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontFamily: "'DM Sans', sans-serif", fontSize: "14px",
+                  color: "#ccc", textTransform: "uppercase", letterSpacing: "0.4px",
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                }}>→ {bus.destination}</div>
+                {bus.presentableDistance && (
+                  <div style={{
+                    fontFamily: "'DM Mono', monospace", fontSize: "10px",
+                    color: "#444", marginTop: "3px",
+                  }}>{bus.presentableDistance}</div>
+                )}
+              </div>
+
+              {/* ETA */}
+              <div style={{ textAlign: "right", flexShrink: 0, minWidth: "52px" }}>
+                <div style={{
+                  fontFamily: "'DM Mono', monospace", fontWeight: 700,
+                  fontSize: "28px", lineHeight: 1, color: etaColor,
+                }}>{minutes !== null ? (minutes <= 0 ? "NOW" : minutes) : "NOW"}</div>
+                {minutes !== null && minutes > 0 && (
+                  <div style={{ fontSize: "10px", color: "#444", fontFamily: "'DM Sans', sans-serif", marginTop: "2px" }}>min</div>
+                )}
+              </div>
+
+              {/* Close button */}
+              <button onClick={onClose} style={{
+                flexShrink: 0,
+                width: "44px", height: "44px",
+                background: "#1a1a1a", border: "1px solid #2a2a2a",
+                borderRadius: "50%", cursor: "pointer",
+                color: "#666", fontSize: "20px",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontFamily: "'DM Mono', monospace", lineHeight: 1,
+              }}>×</button>
+            </div>
+
+            {/* Expanded content */}
+            {sheetExpanded && (
+              <div style={{
+                padding: "0 20px 20px",
+                borderTop: "1px solid #1a1a1a",
+                paddingTop: "14px",
               }}>
-                {lastRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                {noGPS ? (
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: "8px",
+                    fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#555",
+                  }}>
+                    <span>⚠</span>
+                    <span>Real-time bus location not available for this trip</span>
+                  </div>
+                ) : (
+                  <div style={{
+                    fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#444",
+                    lineHeight: 1.8,
+                  }}>
+                    {lastRefresh && (
+                      <div>Updated {lastRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</div>
+                    )}
+                    <div style={{ color: "#333", fontSize: "10px", marginTop: "4px" }}>
+                      Tap the map to explore · Pinch to zoom · Tap 🚌 for details
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
