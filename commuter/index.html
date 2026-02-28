@@ -57,8 +57,10 @@
       background: rgba(0,0,0,0.6) !important; color: #333 !important; font-size: 9px;
     }
     .leaflet-control-attribution a { color: #444 !important; }
-    .bus-pin-label {
-      background: transparent; border: none; box-shadow: none;
+    .bus-pin-label { background: transparent; border: none; box-shadow: none; }
+    /* Hide native zoom on touch devices — pinch-to-zoom is the natural gesture */
+    @media (hover: none) and (pointer: coarse) {
+      .leaflet-control-zoom { display: none !important; }
     }
   </style>
 </head>
@@ -126,7 +128,6 @@
       const color         = lineColor(bus.line);
       const [refreshing,   setRefreshing]  = useState(false);
       const [lastRefresh,  setLastRefresh] = useState(null);
-      const [sheetExpanded, setSheetExpanded] = useState(false);
       const isRefreshing  = useRef(false); // stable guard — avoids refresh() being recreated on state change
 
       const GEO_OPTS = { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 };
@@ -201,7 +202,7 @@
       useEffect(() => {
         // Init map
         const map = L.map(mapRef.current, {
-          zoomControl: false,
+          zoomControl: true,
           attributionControl: true,
         });
         leafletRef.current = map;
@@ -327,29 +328,9 @@
           {/* Full-screen map */}
           <div ref={mapRef} style={{ position: "absolute", inset: 0 }} />
 
-          {/* ── Bottom-left: zoom buttons ── */}
-          <div style={{
-            position: "absolute", bottom: 148, left: "16px", zIndex: 1002,
-            display: "flex", flexDirection: "column", gap: "8px",
-          }}>
-            {[{ label: "+", action: () => leafletRef.current?.zoomIn() },
-              { label: "−", action: () => leafletRef.current?.zoomOut() }
-            ].map(({ label, action }) => (
-              <button key={label} onClick={action} style={{
-                width: "44px", height: "44px",
-                background: "rgba(13,13,13,0.92)", border: "1px solid #2a2a2a",
-                borderRadius: "50%", cursor: "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: "0 2px 12px rgba(0,0,0,0.6)",
-                color: "#aaa", fontSize: "22px", fontFamily: "'DM Mono', monospace",
-                lineHeight: 1,
-              }}>{label}</button>
-            ))}
-          </div>
-
           {/* ── Bottom-right: recenter + refresh ── */}
           <div style={{
-            position: "absolute", bottom: 148, right: "16px", zIndex: 1002,
+            position: "absolute", bottom: 110, right: "16px", zIndex: 1002,
             display: "flex", flexDirection: "column", gap: "8px",
           }}>
             <button onClick={centerOnUser} title="Center on my location" style={{
@@ -382,7 +363,7 @@
             </button>
           </div>
 
-          {/* ── Bottom sheet: route info + close ── */}
+          {/* ── Bottom info bar (static, no expand) ── */}
           <div style={{
             position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 1001,
             background: "#0d0d0d",
@@ -390,20 +371,10 @@
             borderRadius: "20px 20px 0 0",
             paddingBottom: "env(safe-area-inset-bottom, 16px)",
             boxShadow: "0 -4px 32px rgba(0,0,0,0.7)",
-            animation: "slideUp 0.25s ease",
           }}>
-            {/* Drag handle */}
-            <div onClick={() => setSheetExpanded(e => !e)} style={{
-              display: "flex", justifyContent: "center", padding: "12px 0 8px",
-              cursor: "pointer",
-            }}>
-              <div style={{ width: "36px", height: "4px", borderRadius: "2px", background: "#2a2a2a" }} />
-            </div>
-
-            {/* Main row: badge + destination + ETA + close */}
             <div style={{
               display: "flex", alignItems: "center", gap: "14px",
-              padding: "0 20px 16px",
+              padding: "16px 20px",
             }}>
               {/* Line badge */}
               <div style={{
@@ -413,23 +384,28 @@
                 flexShrink: 0, letterSpacing: "0.3px",
               }}>{bus.line}</div>
 
-              {/* Destination + distance */}
+              {/* Destination + status */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
                   fontFamily: "'DM Sans', sans-serif", fontSize: "14px",
                   color: "#ccc", textTransform: "uppercase", letterSpacing: "0.4px",
                   whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                 }}>→ {bus.destination}</div>
-                {bus.presentableDistance && (
-                  <div style={{
-                    fontFamily: "'DM Mono', monospace", fontSize: "10px",
-                    color: "#444", marginTop: "3px",
-                  }}>{bus.presentableDistance}</div>
-                )}
+                <div style={{
+                  fontFamily: "'DM Mono', monospace", fontSize: "10px",
+                  color: "#444", marginTop: "3px",
+                }}>
+                  {bus.presentableDistance || ""}
+                  {lastRefresh && (
+                    <span style={{ color: "#2e2e2e" }}>
+                      {bus.presentableDistance ? " · " : ""}updated {lastRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* ETA */}
-              <div style={{ textAlign: "right", flexShrink: 0, minWidth: "52px" }}>
+              <div style={{ textAlign: "right", flexShrink: 0, minWidth: "48px" }}>
                 <div style={{
                   fontFamily: "'DM Mono', monospace", fontWeight: 700,
                   fontSize: "28px", lineHeight: 1, color: etaColor,
@@ -439,48 +415,15 @@
                 )}
               </div>
 
-              {/* Close button */}
+              {/* Close */}
               <button onClick={onClose} style={{
-                flexShrink: 0,
-                width: "44px", height: "44px",
+                flexShrink: 0, width: "44px", height: "44px",
                 background: "#1a1a1a", border: "1px solid #2a2a2a",
-                borderRadius: "50%", cursor: "pointer",
-                color: "#666", fontSize: "20px",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontFamily: "'DM Mono', monospace", lineHeight: 1,
+                borderRadius: "50%", cursor: "pointer", color: "#666",
+                fontSize: "20px", display: "flex", alignItems: "center",
+                justifyContent: "center", fontFamily: "'DM Mono', monospace",
               }}>×</button>
             </div>
-
-            {/* Expanded content */}
-            {sheetExpanded && (
-              <div style={{
-                padding: "0 20px 20px",
-                borderTop: "1px solid #1a1a1a",
-                paddingTop: "14px",
-              }}>
-                {noGPS ? (
-                  <div style={{
-                    display: "flex", alignItems: "center", gap: "8px",
-                    fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#555",
-                  }}>
-                    <span>⚠</span>
-                    <span>Real-time bus location not available for this trip</span>
-                  </div>
-                ) : (
-                  <div style={{
-                    fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#444",
-                    lineHeight: 1.8,
-                  }}>
-                    {lastRefresh && (
-                      <div>Updated {lastRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</div>
-                    )}
-                    <div style={{ color: "#333", fontSize: "10px", marginTop: "4px" }}>
-                      Tap the map to explore · Pinch to zoom · Tap 🚌 for details
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       );
