@@ -122,6 +122,7 @@
       const color         = lineColor(bus.line);
       const [refreshing,  setRefreshing]  = useState(false);
       const [lastRefresh, setLastRefresh] = useState(null);
+      const isRefreshing  = useRef(false); // stable guard — avoids refresh() being recreated on state change
 
       const GEO_OPTS = { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 };
 
@@ -155,7 +156,8 @@
 
       // ── refresh: re-fetch MTA and re-plot ──────────────────────
       const refresh = useCallback(async () => {
-        if (refreshing) return;
+        if (isRefreshing.current) return;
+        isRefreshing.current = true;
         setRefreshing(true);
         try {
           const raw = `https://bustime.mta.info/api/siri/stop-monitoring.xml`
@@ -169,9 +171,10 @@
         } catch (e) {
           console.error("Map refresh failed:", e);
         } finally {
+          isRefreshing.current = false;
           setRefreshing(false);
         }
-      }, [refreshing, stopId, line, bus, plotFleet]);
+      }, [stopId, line, bus, plotFleet]);
 
       // Center map on user location
       const centerOnUser = useCallback(() => {
