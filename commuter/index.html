@@ -165,7 +165,13 @@
           const res  = await fetch(PROXY + encodeURIComponent(raw));
           const text = await res.text();
           const allBuses   = parseXML(text);
-          const freshFleet = allBuses.filter(b => b.line === line);
+          const freshFleet = allBuses.filter(b => {
+            if (b.line !== line) return false;
+            const iso = b.expectedArrival || b.aimedArrival;
+            if (!iso) return true; // no time = approaching now, always show
+            const m = minutesUntil(iso);
+            return m >= -1 && m <= 30;
+          });
           plotFleet(freshFleet, bus);
           setLastRefresh(new Date());
         } catch (e) {
