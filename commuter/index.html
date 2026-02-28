@@ -328,9 +328,9 @@
           {/* Full-screen map */}
           <div ref={mapRef} style={{ position: "absolute", inset: 0 }} />
 
-          {/* ── Bottom-right: recenter + refresh ── */}
+          {/* ── Bottom-right: recenter + refresh — sit above the card ── */}
           <div style={{
-            position: "absolute", bottom: 110, right: "16px", zIndex: 1002,
+            position: "absolute", bottom: 100, right: "16px", zIndex: 1002,
             display: "flex", flexDirection: "column", gap: "8px",
           }}>
             <button onClick={centerOnUser} title="Center on my location" style={{
@@ -363,18 +363,20 @@
             </button>
           </div>
 
-          {/* ── Bottom info bar (static, no expand) ── */}
+          {/* ── Floating info card ── */}
           <div style={{
-            position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 1001,
-            background: "#0d0d0d",
-            borderTop: `2px solid ${color}`,
-            borderRadius: "20px 20px 0 0",
-            paddingBottom: "env(safe-area-inset-bottom, 16px)",
-            boxShadow: "0 -4px 32px rgba(0,0,0,0.7)",
+            position: "absolute",
+            bottom: "calc(16px + env(safe-area-inset-bottom, 0px))",
+            left: "16px", right: "16px",
+            zIndex: 1001,
+            background: "#0f0f0f",
+            border: "1px solid rgba(255,255,255,0.08)",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.72)",
+            borderRadius: "18px",
           }}>
             <div style={{
               display: "flex", alignItems: "center", gap: "14px",
-              padding: "16px 20px",
+              padding: "16px 18px",
             }}>
               {/* Line badge */}
               <div style={{
@@ -418,8 +420,8 @@
               {/* Close */}
               <button onClick={onClose} style={{
                 flexShrink: 0, width: "44px", height: "44px",
-                background: "#1a1a1a", border: "1px solid #2a2a2a",
-                borderRadius: "50%", cursor: "pointer", color: "#666",
+                background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: "50%", cursor: "pointer", color: "#555",
                 fontSize: "20px", display: "flex", alignItems: "center",
                 justifyContent: "center", fontFamily: "'DM Mono', monospace",
               }}>×</button>
