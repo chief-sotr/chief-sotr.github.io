@@ -600,7 +600,7 @@
     }
 
     /* ── StopPanel ───────────────────────────────────────────── */
-    function StopPanel({ stopId, label, onRemove, onOpenMap }) {
+    function StopPanel({ stopId, label, onRemove, onOpenMap, onDataUpdated }) {
       const [buses,       setBuses]       = useState([]);
       const [loading,     setLoading]     = useState(false);
       const [lastUpdated, setLastUpdated] = useState(null);
@@ -637,7 +637,9 @@
           });
 
           setBuses([...realtime, ...unmatched]);
-          setLastUpdated(new Date());
+          const updated = new Date();
+          setLastUpdated(updated);
+          onDataUpdated?.(updated);
         } catch (e) {
           setFetchError(e.message);
         } finally {
@@ -780,13 +782,8 @@
         try { return JSON.parse(localStorage.getItem("mta-stops")) || []; }
         catch { return []; }
       });
-      const [now,       setNow]       = useState(new Date());
+      const [dataLastUpdated, setDataLastUpdated] = useState(null);
       const [mapData, setMapData] = useState(null); // { bus, fleet, stopId, line }
-
-      useEffect(() => {
-        const t = setInterval(() => setNow(new Date()), 10000);
-        return () => clearInterval(t);
-      }, []);
 
       const saveStops  = (u) => { setStops(u); try { localStorage.setItem("mta-stops", JSON.stringify(u)); } catch {} };
       const addStop    = (s) => saveStops([...stops, s]);
@@ -809,7 +806,7 @@
               color: "#e8e8e8", letterSpacing: "-0.5px", lineHeight: 1,
             }}>lowkey bus rider</div>
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#555", marginTop: "6px" }}>
-              beta · {now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · next 30 min
+              beta · last updated {dataLastUpdated ? dataLastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—"} · next 30 min
             </div>
           </div>
 
@@ -830,6 +827,7 @@
                 label={stop.label}
                 onRemove={() => removeStop(i)}
                 onOpenMap={(bus, fleet, stopId, line) => setMapData({ bus, fleet, stopId, line })}
+                onDataUpdated={(d) => setDataLastUpdated(d)}
               />
             ))
           )}
