@@ -680,11 +680,6 @@
               )}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              {lastUpdated && (
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "10px", color: "#2e2e2e" }}>
-                  {lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                </span>
-              )}
               {loading && <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#333", animation: "blink 1s ease-in-out infinite" }} />}
               <button onClick={onRemove} title="Remove stop" style={{
                 background: "transparent", border: "none", cursor: "pointer",
