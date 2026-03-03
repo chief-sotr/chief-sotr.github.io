@@ -809,7 +809,7 @@
           });
           const { latitude, longitude } = pos.coords;
           setUserCoords({ lat: latitude, lon: longitude });
-          const url = `https://bustime.mta.info/api/where/stops-for-location.json?key=${API_KEY}&lat=${latitude}&lon=${longitude}&radius=400`;
+          const url = `https://bustime.mta.info/api/where/stops-for-location.json?key=${API_KEY}&lat=${latitude}&lon=${longitude}&radius=800`;
           const res = await fetch(PROXY + encodeURIComponent(url));
           const data = await res.json();
           const list = data?.data?.list || [];
@@ -1019,7 +1019,7 @@
                   </>
                 )}
                 {!nearbyLoading && !nearbyError && nearbyStops.length === 0 && userCoords && (
-                  <div style={{ color: "#555", fontFamily: "'DM Sans', sans-serif", fontSize: "13px" }}>No stops found within 400 m.</div>
+                  <div style={{ color: "#555", fontFamily: "'DM Sans', sans-serif", fontSize: "13px" }}>No stops found within 800 m.</div>
                 )}
               </>
             )}
