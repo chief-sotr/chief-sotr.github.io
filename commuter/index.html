@@ -809,12 +809,32 @@
           });
           const { latitude, longitude } = pos.coords;
           setUserCoords({ lat: latitude, lon: longitude });
-          // MTA Bustime uses latSpan/lonSpan (degrees), not radius. ~0.015 lat ≈ 1.7 km, ~0.02 lon ≈ 1.7 km at NYC.
-          const url = `https://bustime.mta.info/api/where/stops-for-location.json?key=${API_KEY}&lat=${latitude}&lon=${longitude}&latSpan=0.015&lonSpan=0.02`;
+          // MTA Bustime uses latSpan/lonSpan (degrees). Exact format from MTA docs.
+          const url = `https://bustime.mta.info/api/where/stops-for-location.json?key=${API_KEY}&lat=${latitude}&lon=${longitude}&latSpan=0.005&lonSpan=0.005&version=2`;
           const res = await fetch(PROXY + encodeURIComponent(url));
-          const data = await res.json();
-          const list = data?.data?.list || [];
-          const refs = data?.data?.references || {};
+          const rawText = await res.text();
+          if (!res.ok) {
+            nearbyFetched.current = false;
+            setNearbyError(`Request failed (${res.status}). Use the Enter ID tab, or check your connection.`);
+            return;
+          }
+          let data;
+          try {
+            data = JSON.parse(rawText);
+          } catch (_) {
+            nearbyFetched.current = false;
+            setNearbyError("Server returned invalid response. Use the Enter ID tab instead.");
+            return;
+          }
+          if (data.code !== undefined && data.code !== 200) {
+            nearbyFetched.current = false;
+            setNearbyError((data.text || "API error") + " — use the Enter ID tab instead.");
+            return;
+          }
+          // OneBusAway: list under data.data; some proxies might wrap differently
+          const payload = data.data != null ? data.data : data;
+          const list = Array.isArray(payload.list) ? payload.list : (Array.isArray(payload.stops) ? payload.stops : []);
+          const refs = payload.references || {};
           const withDistance = list.map((s) => {
             const routeIds = s.routeIds || [];
             const routes = (refs.routes || []).filter((r) => routeIds.includes(r.id));
@@ -828,9 +848,14 @@
             };
           });
           withDistance.sort((a, b) => a.distanceM - b.distanceM);
-          setNearbyStops(withDistance.slice(0, 8));
+          const slice = withDistance.slice(0, 8);
+          if (slice.length === 0 && list.length === 0) {
+            setNearbyError("No stops returned for this location. The Nearby API may be restricted — use the Enter ID tab.");
+          }
+          setNearbyStops(slice);
         } catch (e) {
-          setNearbyError(e.message || "Could not load nearby stops. Use the Enter ID tab instead.");
+          nearbyFetched.current = false;
+          setNearbyError((e && e.message) || "Could not load nearby stops. Use the Enter ID tab instead.");
         } finally {
           setNearbyLoading(false);
         }
