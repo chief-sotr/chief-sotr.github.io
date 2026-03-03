@@ -809,7 +809,8 @@
           });
           const { latitude, longitude } = pos.coords;
           setUserCoords({ lat: latitude, lon: longitude });
-          const url = `https://bustime.mta.info/api/where/stops-for-location.json?key=${API_KEY}&lat=${latitude}&lon=${longitude}&radius=800`;
+          // MTA Bustime uses latSpan/lonSpan (degrees), not radius. ~0.015 lat ≈ 1.7 km, ~0.02 lon ≈ 1.7 km at NYC.
+          const url = `https://bustime.mta.info/api/where/stops-for-location.json?key=${API_KEY}&lat=${latitude}&lon=${longitude}&latSpan=0.015&lonSpan=0.02`;
           const res = await fetch(PROXY + encodeURIComponent(url));
           const data = await res.json();
           const list = data?.data?.list || [];
