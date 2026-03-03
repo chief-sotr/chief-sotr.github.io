@@ -81,6 +81,19 @@
     function lineColor(line) { return LINE_COLORS[line] || "#888"; }
 
     /* ── helpers ─────────────────────────────────────────────── */
+    function distanceMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371000;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
+    function formatDistance(meters) {
+      const feet = Math.round(meters * 3.28084);
+      if (feet < 528) return feet + " ft";
+      return (meters * 0.000621371).toFixed(1) + " mi";
+    }
     function minutesUntil(iso) {
       return Math.round((new Date(iso) - new Date()) / 60000);
     }
@@ -717,61 +730,315 @@
       );
     }
 
-    /* ── AddStopForm ─────────────────────────────────────────── */
-    function AddStopForm({ onAdd }) {
-      const [id,    setId]    = useState("");
+    /* ── AddStopTrigger ───────────────────────────────────────── */
+    function AddStopTrigger({ onClick, hasStops }) {
+      return (
+        <button
+          type="button"
+          onClick={onClick}
+          style={{
+            width: "100%",
+            border: "1px dashed " + (hasStops ? "#2a2a2a" : "#3a3a3a"),
+            borderRadius: "10px",
+            padding: "18px",
+            background: "transparent",
+            color: hasStops ? "#444" : "#555",
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: "14px",
+            cursor: "pointer",
+            marginBottom: "32px",
+          }}
+        >
+          + Add Stop
+        </button>
+      );
+    }
+
+    /* ── AddStopModal ─────────────────────────────────────────── */
+    function AddStopModal({ onAdd, onClose }) {
+      const [tab, setTab] = useState("enterId");
+      const [id, setId] = useState("");
       const [label, setLabel] = useState("");
       const inputRef = useRef();
+      const [userCoords, setUserCoords] = useState(null);
+      const [nearbyStops, setNearbyStops] = useState([]);
+      const [nearbyLoading, setNearbyLoading] = useState(false);
+      const [nearbyError, setNearbyError] = useState(null);
+      const [selectedIds, setSelectedIds] = useState(new Set());
+      const nearbyFetched = useRef(false);
 
-      const submit = () => {
+      const close = useCallback(() => {
+        nearbyFetched.current = false;
+        setTab("enterId");
+        setId("");
+        setLabel("");
+        setUserCoords(null);
+        setNearbyStops([]);
+        setNearbyError(null);
+        setSelectedIds(new Set());
+        onClose();
+      }, [onClose]);
+
+      useEffect(() => {
+        const handleKey = (e) => { if (e.key === "Escape") close(); };
+        window.addEventListener("keydown", handleKey);
+        return () => window.removeEventListener("keydown", handleKey);
+      }, [close]);
+
+      const submitEnterId = () => {
         const trimmed = id.trim();
         if (!trimmed) return;
-        onAdd({ id: trimmed, label: label.trim() });
-        setId(""); setLabel("");
-        inputRef.current?.focus();
+        onAdd({ id: trimmed.replace(/^MTA_/i, ""), label: label.trim() });
+        close();
       };
 
+      const fetchNearby = useCallback(async () => {
+        if (nearbyFetched.current) return;
+        nearbyFetched.current = true;
+        setNearbyError(null);
+        setNearbyStops([]);
+        if (!navigator.geolocation) {
+          setNearbyError("Location unavailable — use the Enter ID tab instead");
+          setNearbyLoading(false);
+          return;
+        }
+        setNearbyLoading(true);
+        try {
+          const pos = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+          });
+          const { latitude, longitude } = pos.coords;
+          setUserCoords({ lat: latitude, lon: longitude });
+          const url = `https://bustime.mta.info/api/where/stops-for-location.json?key=${API_KEY}&lat=${latitude}&lon=${longitude}&radius=400`;
+          const res = await fetch(PROXY + encodeURIComponent(url));
+          const data = await res.json();
+          const list = data?.data?.list || [];
+          const refs = data?.data?.references || {};
+          const withDistance = list.map((s) => {
+            const routeIds = s.routeIds || [];
+            const routes = (refs.routes || []).filter((r) => routeIds.includes(r.id));
+            const shortNames = routes.map((r) => r.shortName || r.id).filter(Boolean);
+            const meters = distanceMeters(latitude, longitude, s.lat, s.lon);
+            return {
+              ...s,
+              idClean: (s.code != null ? String(s.code) : (s.id || "").replace(/^MTA_/i, "")),
+              routeShortNames: shortNames,
+              distanceM: meters,
+            };
+          });
+          withDistance.sort((a, b) => a.distanceM - b.distanceM);
+          setNearbyStops(withDistance.slice(0, 8));
+        } catch (e) {
+          setNearbyError(e.message || "Could not load nearby stops. Use the Enter ID tab instead.");
+        } finally {
+          setNearbyLoading(false);
+        }
+      }, []);
+
+      const onTabNearby = () => {
+        setTab("nearby");
+        fetchNearby();
+      };
+
+      const toggleStop = (stop) => {
+        const idClean = stop.idClean || (stop.id || "").replace(/^MTA_/i, "");
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          if (next.has(idClean)) next.delete(idClean);
+          else if (next.size < 4) next.add(idClean);
+          return next;
+        });
+        setLabel(stop.name || "");
+      };
+
+      const addSelectedStops = () => {
+        const toAdd = nearbyStops.filter((s) => selectedIds.has(s.idClean || (s.id || "").replace(/^MTA_/i, "")));
+        toAdd.forEach((s) => onAdd({ id: s.idClean || s.id, label: s.name || "" }));
+        close();
+      };
+
+      const cardContent = (
+        <div
+          style={{
+            background: "#0d0d0d",
+            border: "1px solid #1a1a1a",
+            borderRadius: "12px",
+            maxWidth: "420px",
+            width: "100%",
+            maxHeight: "90vh",
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", borderBottom: "1px solid #1a1a1a" }}>
+            <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "16px", fontWeight: 700, color: "#e8e8e8" }}>Add stop</div>
+            <button onClick={close} style={{
+              background: "none", border: "none", color: "#555", fontSize: "22px", cursor: "pointer",
+              padding: "0 4px", lineHeight: 1, fontFamily: "'DM Mono', monospace",
+            }}>×</button>
+          </div>
+          <div style={{ display: "flex", borderBottom: "1px solid #1a1a1a" }}>
+            <button
+              type="button"
+              onClick={() => setTab("enterId")}
+              style={{
+                flex: 1, padding: "12px 16px", background: "none", border: "none",
+                borderBottom: tab === "enterId" ? "2px solid #F5A623" : "2px solid transparent",
+                color: tab === "enterId" ? "#e8e8e8" : "#555",
+                fontFamily: "'DM Sans', sans-serif", fontSize: "13px", fontWeight: 600, cursor: "pointer",
+              }}
+            >
+              Enter ID
+            </button>
+            <button
+              type="button"
+              onClick={onTabNearby}
+              style={{
+                flex: 1, padding: "12px 16px", background: "none", border: "none",
+                borderBottom: tab === "nearby" ? "2px solid #F5A623" : "2px solid transparent",
+                color: tab === "nearby" ? "#e8e8e8" : "#555",
+                fontFamily: "'DM Sans', sans-serif", fontSize: "13px", fontWeight: 600, cursor: "pointer",
+              }}
+            >
+              Nearby
+            </button>
+          </div>
+          <div style={{ padding: "18px", overflowY: "auto", flex: 1 }}>
+            {tab === "enterId" && (
+              <>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  placeholder="Stop ID (e.g. 308829)"
+                  value={id}
+                  onChange={(e) => setId(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && submitEnterId()}
+                  style={{
+                    width: "100%", background: "#0a0a0a", border: "1px solid #1a1a1a",
+                    borderRadius: "8px", padding: "12px 14px", color: "#e8e8e8",
+                    fontFamily: "'DM Mono', monospace", fontSize: "14px", marginBottom: "12px",
+                  }}
+                />
+                <input
+                  type="text"
+                  placeholder="e.g. Northbound on Court St"
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && submitEnterId()}
+                  style={{
+                    width: "100%", background: "#0a0a0a", border: "1px solid #1a1a1a",
+                    borderRadius: "8px", padding: "12px 14px", color: "#e8e8e8",
+                    fontFamily: "'DM Sans', sans-serif", fontSize: "14px", marginBottom: "12px",
+                  }}
+                />
+                <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "11px", color: "#555", marginBottom: "16px", lineHeight: 1.5 }}>
+                  Find stop IDs at{" "}
+                  <a href="https://bustime.mta.info" target="_blank" rel="noreferrer" style={{ color: "#666", textDecoration: "underline" }}>bustime.mta.info</a>
+                  {" "}→ click your stop → copy the ID from the URL.
+                </div>
+                <button onClick={submitEnterId} style={{
+                  width: "100%", padding: "12px 18px", background: "#F5A623", color: "#0a0a0a",
+                  border: "none", borderRadius: "8px", fontFamily: "'DM Sans', sans-serif",
+                  fontWeight: 700, fontSize: "14px", cursor: "pointer",
+                }}>
+                  Add Stop
+                </button>
+              </>
+            )}
+            {tab === "nearby" && (
+              <>
+                {nearbyLoading && (
+                  <div style={{ padding: "24px 0", color: "#555", fontFamily: "'DM Sans', sans-serif", fontSize: "14px" }}>
+                    Locating you…
+                  </div>
+                )}
+                {!nearbyLoading && nearbyError && (
+                  <div style={{
+                    padding: "12px", background: "rgba(255,80,80,0.08)", border: "1px solid rgba(255,80,80,0.2)",
+                    borderRadius: "8px", fontFamily: "'DM Sans', sans-serif", fontSize: "12px", color: "#ff6060", marginBottom: "12px",
+                  }}>
+                    {nearbyError}
+                  </div>
+                )}
+                {!nearbyLoading && !nearbyError && nearbyStops.length > 0 && (
+                  <>
+                    <div style={{ maxHeight: "55vh", overflowY: "auto", marginBottom: "16px" }}>
+                      {nearbyStops.map((stop) => {
+                        const idClean = stop.idClean || (stop.id || "").replace(/^MTA_/i, "");
+                        const selected = selectedIds.has(idClean);
+                        return (
+                          <div
+                            key={stop.id || idClean}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => toggleStop(stop)}
+                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleStop(stop); } }}
+                            style={{
+                              display: "flex", alignItems: "center", gap: "12px",
+                              padding: "12px 14px",
+                              borderLeft: "3px solid " + (selected ? "#F5A623" : "transparent"),
+                              background: selected ? "rgba(245,166,35,0.06)" : "transparent",
+                              borderRadius: "4px", marginBottom: "8px", cursor: "pointer",
+                              border: "1px solid #1a1a1a",
+                            }}
+                          >
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "13px", color: "#e8e8e8", marginBottom: "4px" }}>{stop.name || "Stop " + idClean}</div>
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                                {(stop.routeShortNames || []).map((sn) => (
+                                  <span key={sn} style={{
+                                    background: lineColor(sn), color: "#0a0a0a",
+                                    fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: "10px",
+                                    padding: "2px 6px", borderRadius: "4px",
+                                  }}>{sn}</span>
+                                ))}
+                                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#555" }}>{formatDistance(stop.distanceM)}</span>
+                              </div>
+                            </div>
+                            {selected && (
+                              <span style={{ color: "#F5A623", fontSize: "18px" }}>✓</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button
+                      onClick={addSelectedStops}
+                      disabled={selectedIds.size === 0}
+                      style={{
+                        width: "100%", padding: "12px 18px", background: selectedIds.size > 0 ? "#F5A623" : "#2a2a2a",
+                        color: selectedIds.size > 0 ? "#0a0a0a" : "#555", border: "none", borderRadius: "8px",
+                        fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "14px", cursor: selectedIds.size > 0 ? "pointer" : "default",
+                      }}
+                    >
+                      Add Stop{selectedIds.size !== 1 ? "s" : ""}
+                    </button>
+                  </>
+                )}
+                {!nearbyLoading && !nearbyError && nearbyStops.length === 0 && userCoords && (
+                  <div style={{ color: "#555", fontFamily: "'DM Sans', sans-serif", fontSize: "13px" }}>No stops found within 400 m.</div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      );
+
       return (
-        <div style={{
-          background: "rgba(255,255,255,0.02)", border: "1px solid #1a1a1a",
-          borderRadius: "10px", padding: "18px 20px", marginBottom: "32px",
-        }}>
-          <div style={{
-            fontFamily: "'DM Sans', sans-serif", fontSize: "11px", fontWeight: 600,
-            color: "#444", textTransform: "uppercase", letterSpacing: "1.2px", marginBottom: "14px",
-          }}>Add a Bus Stop</div>
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            <input ref={inputRef} type="text" placeholder="Stop ID  (e.g. 308829)"
-              value={id} onChange={(e) => setId(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submit()}
-              style={{
-                flex: "1 1 130px", background: "#0d0d0d", border: "1px solid #222",
-                borderRadius: "7px", padding: "10px 12px", color: "#ccc",
-                fontFamily: "'DM Mono', monospace", fontSize: "13px",
-              }} />
-            <input type="text" placeholder="Label  (optional, e.g. Northbound)"
-              value={label} onChange={(e) => setLabel(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submit()}
-              style={{
-                flex: "2 1 180px", background: "#0d0d0d", border: "1px solid #222",
-                borderRadius: "7px", padding: "10px 12px", color: "#ccc",
-                fontFamily: "'DM Sans', sans-serif", fontSize: "13px",
-              }} />
-            <button onClick={submit} style={{
-              flexShrink: 0, padding: "10px 20px", background: "#F5A623", color: "#0a0a0a",
-              border: "none", borderRadius: "7px", fontFamily: "'DM Sans', sans-serif",
-              fontWeight: 700, fontSize: "13px", cursor: "pointer",
-            }}>+ Add</button>
-          </div>
-          <div style={{
-            fontFamily: "'DM Sans', sans-serif", fontSize: "11px", color: "#2e2e2e",
-            marginTop: "10px", lineHeight: 1.6,
-          }}>
-            Find stop IDs at{" "}
-            <a href="https://bustime.mta.info" target="_blank" rel="noreferrer"
-              style={{ color: "#3a3a3a", textDecoration: "underline" }}>bustime.mta.info</a>
-            {" "}→ click your stop → copy the ID from the URL. Each direction is a separate stop ID.
-          </div>
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 1000,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: "20px",
+            animation: "modalIn 0.2s ease",
+          }}
+          onClick={close}
+        >
+          {cardContent}
         </div>
       );
     }
@@ -784,9 +1051,10 @@
       });
       const [dataLastUpdated, setDataLastUpdated] = useState(null);
       const [mapData, setMapData] = useState(null); // { bus, fleet, stopId, line }
+      const [addModalOpen, setAddModalOpen] = useState(false);
 
       const saveStops  = (u) => { setStops(u); try { localStorage.setItem("mta-stops", JSON.stringify(u)); } catch {} };
-      const addStop    = (s) => saveStops([...stops, s]);
+      const addStop    = (s) => setStops((prev) => { const next = [...prev, s]; try { localStorage.setItem("mta-stops", JSON.stringify(next)); } catch {} return next; });
       const removeStop = (i) => saveStops(stops.filter((_, idx) => idx !== i));
 
       return (
@@ -810,14 +1078,16 @@
             </div>
           </div>
 
-          <AddStopForm onAdd={addStop} />
+          <AddStopTrigger onClick={() => setAddModalOpen(true)} hasStops={stops.length > 0} />
+
+          {addModalOpen && <AddStopModal onAdd={addStop} onClose={() => setAddModalOpen(false)} />}
 
           {stops.length === 0 ? (
             <div style={{
               padding: "32px 20px", textAlign: "center",
               fontFamily: "'DM Mono', monospace", fontSize: "12px", color: "#222", lineHeight: 2,
             }}>
-              No stops added yet.<br />Enter a stop ID above to get started.
+              No stops added yet.<br />Click &quot;+ Add Stop&quot; to get started.
             </div>
           ) : (
             stops.map((stop, i) => (
