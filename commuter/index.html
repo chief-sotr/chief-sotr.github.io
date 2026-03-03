@@ -775,13 +775,6 @@
       const userMarkerRef = useRef(null);
 
       const close = useCallback(() => {
-        if (leafletRef.current) {
-          leafletRef.current.remove();
-          leafletRef.current = null;
-        }
-        circleRef.current = null;
-        markersRef.current = [];
-        userMarkerRef.current = null;
         setTab("enterId");
         setId("");
         setLabel("");
