@@ -889,11 +889,16 @@
           }
           const payload = data.data != null ? data.data : data;
           const list = Array.isArray(payload.list) ? payload.list : (Array.isArray(payload.stops) ? payload.stops : []);
-          const refs = payload.references || {};
+          const refs = payload.references || data.references || {};
+          const routesList = Array.isArray(refs.routes) ? refs.routes : Object.values(refs.routes || {});
           const stopsWithMeta = list.map((s) => {
-            const routeIds = s.routeIds || [];
-            const routes = (refs.routes || []).filter((r) => routeIds.includes(r.id));
-            const shortNames = routes.map((r) => r.shortName || r.id).filter(Boolean);
+            const routeIds = s.routeIds || (s.routeId ? [s.routeId] : []);
+            const routes = routesList.filter((r) => routeIds.includes(r.id));
+            let shortNames = routes.map((r) => r.shortName || r.id).filter(Boolean);
+            if (shortNames.length === 0 && (s.routes || s.routeShortNames)) {
+              const fromStop = s.routeShortNames || (s.routes || []).map((r) => (typeof r === "string" ? r : (r && r.shortName) || (r && r.id)));
+              shortNames = [].concat(fromStop).filter(Boolean);
+            }
             const meters = distanceMeters(lat, lon, s.lat, s.lon);
             return {
               ...s,
@@ -905,11 +910,11 @@
           });
 
           setNearbyLoadingPhase("arrivals");
-          const arrivalsUrls = stopsWithMeta.map((stop) =>
-            `https://bustime.mta.info/api/where/arrivals-and-departures-for-stop/MTA_${stop.idClean}.json?key=${API_KEY}&minutesBefore=0&minutesAfter=90`
+          const siriUrls = stopsWithMeta.map((stop) =>
+            `https://bustime.mta.info/api/siri/stop-monitoring.xml?key=${API_KEY}&OperatorRef=MTA&MonitoringRef=MTA_${stop.idClean}&MaximumStopVisits=20`
           );
-          const arrivalsResponses = await Promise.all(
-            arrivalsUrls.map((url) => fetch(PROXY + encodeURIComponent(url)).then((r) => r.json()).catch(() => null))
+          const siriResponses = await Promise.all(
+            siriUrls.map((url) => fetch(PROXY + encodeURIComponent(url)).then((r) => r.text()).catch(() => null))
           );
 
           const groupMap = new Map();
@@ -921,14 +926,18 @@
           };
 
           stopsWithMeta.forEach((stop, i) => {
-            const resp = arrivalsResponses[i];
-            const entry = resp?.data?.entry;
-            const arrivals = entry?.arrivalsAndDepartures || [];
+            const xmlText = siriResponses[i];
+            let visits = [];
+            if (xmlText) {
+              try {
+                visits = parseXML(xmlText);
+              } catch (_) {}
+            }
             const seen = new Set();
-            if (arrivals.length > 0) {
-              arrivals.forEach((a) => {
-                const line = a.routeShortName || "";
-                const headsign = (a.tripHeadsign || "").trim().toUpperCase() || "—";
+            if (visits.length > 0) {
+              visits.forEach((v) => {
+                const line = (v.line || "").trim();
+                const headsign = (v.destination || "").trim().toUpperCase() || "—";
                 if (!line) return;
                 const pair = line + "|" + headsign;
                 if (seen.has(pair)) return;
