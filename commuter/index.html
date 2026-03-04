@@ -1014,7 +1014,10 @@
       const addSelectedStops = () => {
         selectedKeys.forEach((key) => {
           const [idClean, line, headsign] = key.split(SEL_SEP);
-          onAdd({ id: idClean, label: line + " → " + toTitleCase(headsign || "") });
+          const group = nearbyGroups.find((g) => g.line === line && g.headsign === headsign);
+          const stop = group?.stops?.find((s) => (s.idClean || (s.id || "").replace(/^MTA_/i, "")) === idClean);
+          const label = (stop?.name || idClean).trim() || idClean;
+          onAdd({ id: idClean, label });
         });
         close();
       };
