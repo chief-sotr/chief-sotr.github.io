@@ -70,7 +70,7 @@
     const { useState, useEffect, useCallback, useRef } = React;
 
     /* ── config ──────────────────────────────────────────────── */
-    const APP_VERSION = "1.5.0"; // Semver: bump PATCH for fixes, MINOR for features, MAJOR for breaking changes
+    const APP_VERSION = "1.6.0"; // Semver: bump PATCH for fixes, MINOR for features, MAJOR for breaking changes
     const API_KEY = "5100a3c4-9704-43e4-b6d2-5d8adb10a124";
     const PROXY   = "https://mta-proxy-sundayontheroof.chief-b4a.workers.dev/?url=";
 
@@ -94,6 +94,20 @@
       const feet = Math.round(meters * 3.28084);
       if (feet < 528) return feet + " ft";
       return (meters * 0.000621371).toFixed(1) + " mi";
+    }
+    function formatDistanceNearby(meters) {
+      const feet = Math.round(meters * 3.28084);
+      if (feet < 1000) return feet + " ft";
+      return (meters * 0.000621371).toFixed(1) + " mi";
+    }
+    function inferDirection(stopName) {
+      if (!stopName || typeof stopName !== "string") return "—";
+      const n = stopName.toUpperCase();
+      if (/\bNB\b|NORTHBOUND|NORTH\b/.test(n)) return "→ Northbound";
+      if (/\bSB\b|SOUTHBOUND|SOUTH\b/.test(n)) return "→ Southbound";
+      if (/\bEB\b|EASTBOUND|EAST\b/.test(n)) return "→ Eastbound";
+      if (/\bWB\b|WESTBOUND|WEST\b/.test(n)) return "→ Westbound";
+      return "→ " + (stopName.length > 28 ? stopName.slice(0, 25) + "…" : stopName);
     }
     function minutesUntil(iso) {
       return Math.round((new Date(iso) - new Date()) / 60000);
@@ -743,7 +757,7 @@
             borderRadius: "10px",
             padding: "18px",
             background: "transparent",
-            color: hasStops ? "#444" : "#555",
+            color: hasStops ? "#444" : "#666",
             fontFamily: "'DM Sans', sans-serif",
             fontSize: "14px",
             cursor: "pointer",
@@ -756,33 +770,25 @@
     }
 
     /* ── AddStopModal ─────────────────────────────────────────── */
-    const NEARBY_RADIUS_M = 400;
     function AddStopModal({ onAdd, onClose }) {
       const [tab, setTab] = useState("enterId");
       const [id, setId] = useState("");
       const [label, setLabel] = useState("");
       const inputRef = useRef();
-      const [userCoords, setUserCoords] = useState(null);
       const [nearbyStops, setNearbyStops] = useState([]);
       const [nearbyLoading, setNearbyLoading] = useState(false);
       const [nearbyError, setNearbyError] = useState(null);
       const [selectedIds, setSelectedIds] = useState(new Set());
-      const [searchCenter, setSearchCenter] = useState(null);
-      const mapRef = useRef(null);
-      const leafletRef = useRef(null);
-      const circleRef = useRef(null);
-      const markersRef = useRef([]);
-      const userMarkerRef = useRef(null);
+      const nearbyFetched = useRef(false);
 
       const close = useCallback(() => {
+        nearbyFetched.current = false;
         setTab("enterId");
         setId("");
         setLabel("");
-        setUserCoords(null);
         setNearbyStops([]);
         setNearbyError(null);
         setSelectedIds(new Set());
-        setSearchCenter(null);
         onClose();
       }, [onClose]);
 
@@ -799,16 +805,15 @@
         close();
       };
 
-      // Fetch stops for a given map center (used on initial load, "Load stops here", and "Center on me")
-      const fetchStopsForMap = useCallback(async (centerLat, centerLon) => {
+      const fetchNearby = useCallback(async (lat, lon) => {
         setNearbyError(null);
         setNearbyLoading(true);
         try {
-          const url = `https://bustime.mta.info/api/where/stops-for-location.json?key=${API_KEY}&lat=${centerLat}&lon=${centerLon}&latSpan=0.004&lonSpan=0.005&version=2`;
+          const url = `https://bustime.mta.info/api/where/stops-for-location.json?key=${API_KEY}&lat=${lat}&lon=${lon}&latSpan=0.004&lonSpan=0.005&version=2`;
           const res = await fetch(PROXY + encodeURIComponent(url));
           const rawText = await res.text();
           if (!res.ok) {
-            setNearbyError(`Request failed (${res.status}). Try Enter ID tab or check connection.`);
+            setNearbyError("Couldn't load nearby stops — check your connection and try again");
             setNearbyStops([]);
             return;
           }
@@ -816,12 +821,12 @@
           try {
             data = JSON.parse(rawText);
           } catch (_) {
-            setNearbyError("Server returned invalid response. Use the Enter ID tab instead.");
+            setNearbyError("Couldn't load nearby stops — check your connection and try again");
             setNearbyStops([]);
             return;
           }
           if (data.code !== undefined && data.code !== 200) {
-            setNearbyError((data.text || "API error") + " — use the Enter ID tab instead.");
+            setNearbyError("Couldn't load nearby stops — check your connection and try again");
             setNearbyStops([]);
             return;
           }
@@ -832,7 +837,7 @@
             const routeIds = s.routeIds || [];
             const routes = (refs.routes || []).filter((r) => routeIds.includes(r.id));
             const shortNames = routes.map((r) => r.shortName || r.id).filter(Boolean);
-            const meters = distanceMeters(centerLat, centerLon, s.lat, s.lon);
+            const meters = distanceMeters(lat, lon, s.lat, s.lon);
             return {
               ...s,
               idClean: (s.code != null ? String(s.code) : (s.id || "").replace(/^MTA_/i, "")),
@@ -840,31 +845,55 @@
               distanceM: meters,
             };
           });
-          withDistance.sort((a, b) => a.distanceM - b.distanceM);
-          setSearchCenter({ lat: centerLat, lon: centerLon });
           setNearbyStops(withDistance);
           if (withDistance.length === 0) {
-            setNearbyError("No stops in this area.");
+            setNearbyError("No stops found nearby — try entering a Stop ID manually");
           }
         } catch (e) {
-          setNearbyError((e && e.message) || "Could not load nearby stops. Use the Enter ID tab instead.");
+          setNearbyError("Couldn't load nearby stops — check your connection and try again");
           setNearbyStops([]);
         } finally {
           setNearbyLoading(false);
         }
       }, []);
 
-      const onTabNearby = () => setTab("nearby");
+      const onTabNearby = () => {
+        setTab("nearby");
+        if (nearbyFetched.current) return;
+        nearbyFetched.current = true;
+        setNearbyError(null);
+        setNearbyStops([]);
+        if (!navigator.geolocation) {
+          setNearbyError("Location access denied — use the Enter ID tab instead");
+          setNearbyLoading(false);
+          return;
+        }
+        setNearbyLoading(true);
+        navigator.geolocation.getCurrentPosition(
+          (pos) => fetchNearby(pos.coords.latitude, pos.coords.longitude),
+          () => {
+            setNearbyError("Location access denied — use the Enter ID tab instead");
+            setNearbyLoading(false);
+            nearbyFetched.current = false;
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+        );
+      };
+
+      const retryNearby = () => {
+        nearbyFetched.current = false;
+        setNearbyError(null);
+        onTabNearby();
+      };
 
       const toggleStop = (stop) => {
         const idClean = stop.idClean || (stop.id || "").replace(/^MTA_/i, "");
         setSelectedIds((prev) => {
           const next = new Set(prev);
           if (next.has(idClean)) next.delete(idClean);
-          else if (next.size < 4) next.add(idClean);
+          else next.add(idClean);
           return next;
         });
-        setLabel(stop.name || "");
       };
 
       const addSelectedStops = () => {
@@ -873,131 +902,31 @@
         close();
       };
 
-      const loadStopsHere = () => {
-        const map = leafletRef.current;
-        if (!map) return;
-        const center = map.getCenter();
-        fetchStopsForMap(center.lat, center.lng);
-      };
-
-      const centerOnMe = () => {
-        if (!navigator.geolocation || !leafletRef.current) return;
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const { latitude, longitude } = pos.coords;
-            setUserCoords({ lat: latitude, lon: longitude });
-            const map = leafletRef.current;
-            if (!map) return;
-            map.setView([latitude, longitude], 16);
-            const userIcon = L.divIcon({
-              className: "bus-pin-label",
-              html: '<div style="width:14px;height:14px;border-radius:50%;background:#4A90D9;border:2px solid #fff;box-shadow:0 0 0 2px rgba(74,144,217,0.4);"><\/div>',
-              iconSize: [14, 14],
-              iconAnchor: [7, 7],
-            });
-            if (userMarkerRef.current) userMarkerRef.current.setLatLng([latitude, longitude]);
-            else userMarkerRef.current = L.marker([latitude, longitude], { icon: userIcon }).addTo(map).bindPopup("You are here");
-            fetchStopsForMap(latitude, longitude);
-          },
-          () => setNearbyError("Location unavailable — use the Enter ID tab instead.")
-        );
-      };
-
-      // Init map when Nearby tab is shown; get location, center, fetch stops
-      useEffect(() => {
-        if (tab !== "nearby" || !mapRef.current) return;
-        const map = L.map(mapRef.current, { zoomControl: true, attributionControl: true });
-        leafletRef.current = map;
-        L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/">CARTO</a>',
-          subdomains: "abcd",
-          maxZoom: 19,
-        }).addTo(map);
-        const defaultCenter = [40.6782, -73.9442];
-        map.setView(defaultCenter, 14);
-        if (navigator.geolocation) {
-          setNearbyLoading(true);
-          setNearbyError(null);
-          navigator.geolocation.getCurrentPosition(
-            (pos) => {
-              const { latitude, longitude } = pos.coords;
-              setUserCoords({ lat: latitude, lon: longitude });
-              map.setView([latitude, longitude], 16);
-              const userIcon = L.divIcon({
-                className: "bus-pin-label",
-                html: '<div style="width:14px;height:14px;border-radius:50%;background:#4A90D9;border:2px solid #fff;box-shadow:0 0 0 2px rgba(74,144,217,0.4);"><\/div>',
-                iconSize: [14, 14],
-                iconAnchor: [7, 7],
-              });
-              userMarkerRef.current = L.marker([latitude, longitude], { icon: userIcon }).addTo(map)
-                .bindPopup("You are here");
-              fetchStopsForMap(latitude, longitude);
-            },
-            () => {
-              setNearbyLoading(false);
-              setNearbyError("Location unavailable — pan the map and tap \"Load stops here\" or use Enter ID tab.");
-              setUserCoords(null);
-            },
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-          );
-        } else {
-          setNearbyError("Location unavailable — pan the map and tap \"Load stops here\" or use Enter ID tab.");
-        }
-        return () => {
-          map.remove();
-          leafletRef.current = null;
-          circleRef.current = null;
-          markersRef.current = [];
-          userMarkerRef.current = null;
-        };
-      }, [tab]);
-
-      // Update 400m circle and stop markers when stops or search center change
-      useEffect(() => {
-        if (tab !== "nearby" || !leafletRef.current) return;
-        const map = leafletRef.current;
-        if (searchCenter) {
-          if (circleRef.current) circleRef.current.setLatLng([searchCenter.lat, searchCenter.lon]);
-          else {
-            const circle = L.circle([searchCenter.lat, searchCenter.lon], {
-              radius: NEARBY_RADIUS_M,
-              color: "#F5A623",
-              fillColor: "#F5A623",
-              fillOpacity: 0.08,
-              weight: 1,
-            }).addTo(map);
-            circleRef.current = circle;
-          }
-        }
-        markersRef.current.forEach((m) => map.removeLayer(m));
-        markersRef.current = [];
+      // Group by route, then by direction; sort groups by nearest stop distance
+      const groupedStops = (() => {
+        const map = new Map();
         nearbyStops.forEach((stop) => {
-          const idClean = stop.idClean || (stop.id || "").replace(/^MTA_/i, "");
-          const selected = selectedIds.has(idClean);
-          const color = selected ? "#F5A623" : "#888";
-          const icon = L.divIcon({
-            className: "bus-pin-label",
-            html: '<div style="display:flex;align-items:center;justify-content:center;background:' + color + ';color:#0a0a0a;font-family:DM Mono,monospace;font-weight:700;font-size:11px;padding:4px 6px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.5);border:2px solid ' + (selected ? "#F5A623" : "#444") + ';">' + (selected ? "✓" : "🚏") + '<\/div>',
-            iconSize: [28, 24],
-            iconAnchor: [14, 24],
-          });
-          const marker = L.marker([stop.lat, stop.lon], { icon })
-            .addTo(map)
-            .on("click", () => toggleStop(stop));
-          marker.bindPopup((stop.name || "Stop " + idClean) + (stop.routeShortNames?.length ? " · " + stop.routeShortNames.join(", ") : ""));
-          markersRef.current.push(marker);
+          const route = (stop.routeShortNames && stop.routeShortNames[0]) || "?";
+          const direction = inferDirection(stop.name);
+          const key = route + "|" + direction;
+          if (!map.has(key)) map.set(key, { route, direction, stops: [] });
+          map.get(key).stops.push(stop);
         });
-      }, [tab, searchCenter, nearbyStops, selectedIds]);
+        const groups = Array.from(map.values());
+        groups.forEach((g) => g.stops.sort((a, b) => a.distanceM - b.distanceM));
+        groups.sort((a, b) => Math.min(...a.stops.map((s) => s.distanceM)) - Math.min(...b.stops.map((s) => s.distanceM)));
+        return groups;
+      })();
 
       const cardContent = (
         <div
           style={{
             background: "#0d0d0d",
             border: "1px solid #1a1a1a",
-            borderRadius: "12px",
-            maxWidth: "420px",
+            borderRadius: "16px",
+            maxWidth: "480px",
             width: "100%",
-            maxHeight: "90vh",
+            maxHeight: "calc(100vh - 96px)",
             overflow: "hidden",
             display: "flex",
             flexDirection: "column",
@@ -1006,7 +935,7 @@
           onClick={(e) => e.stopPropagation()}
         >
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", borderBottom: "1px solid #1a1a1a" }}>
-            <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "16px", fontWeight: 700, color: "#e8e8e8" }}>Add stop</div>
+            <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "16px", fontWeight: 600, color: "#e8e8e8" }}>Add Stop</div>
             <button onClick={close} style={{
               background: "none", border: "none", color: "#555", fontSize: "22px", cursor: "pointer",
               padding: "0 4px", lineHeight: 1, fontFamily: "'DM Mono', monospace",
@@ -1019,7 +948,7 @@
               style={{
                 flex: 1, padding: "12px 16px", background: "none", border: "none",
                 borderBottom: tab === "enterId" ? "2px solid #F5A623" : "2px solid transparent",
-                color: tab === "enterId" ? "#e8e8e8" : "#555",
+                color: tab === "enterId" ? "#e8e8e8" : "#444",
                 fontFamily: "'DM Sans', sans-serif", fontSize: "13px", fontWeight: 600, cursor: "pointer",
               }}
             >
@@ -1031,7 +960,7 @@
               style={{
                 flex: 1, padding: "12px 16px", background: "none", border: "none",
                 borderBottom: tab === "nearby" ? "2px solid #F5A623" : "2px solid transparent",
-                color: tab === "nearby" ? "#e8e8e8" : "#555",
+                color: tab === "nearby" ? "#e8e8e8" : "#444",
                 fontFamily: "'DM Sans', sans-serif", fontSize: "13px", fontWeight: 600, cursor: "pointer",
               }}
             >
@@ -1082,87 +1011,109 @@
             )}
             {tab === "nearby" && (
               <>
-                <div style={{ position: "relative", height: "55vh", minHeight: "280px", borderRadius: "8px", overflow: "hidden", background: "#111" }}>
-                  <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
-                  {nearbyLoading && (
-                    <div style={{
-                      position: "absolute", top: 0, left: 0, right: 0, padding: "12px 16px",
-                      background: "rgba(13,13,13,0.9)", color: "#e8e8e8", fontFamily: "'DM Sans', sans-serif", fontSize: "13px",
-                    }}>
-                      Locating you…
-                    </div>
-                  )}
-                  {!nearbyLoading && nearbyError && (
-                    <div style={{
-                      position: "absolute", top: 0, left: 0, right: 0, padding: "10px 14px",
-                      background: "rgba(255,80,80,0.15)", borderBottom: "1px solid rgba(255,80,80,0.3)",
-                      fontFamily: "'DM Sans', sans-serif", fontSize: "12px", color: "#ff9090",
-                    }}>
-                      {nearbyError}
-                    </div>
-                  )}
-                  <div style={{
-                    position: "absolute", bottom: "12px", left: "12px", right: "12px",
-                    display: "flex", gap: "8px", justifyContent: "center", flexWrap: "wrap",
-                  }}>
-                    <button
-                      type="button"
-                      onClick={centerOnMe}
-                      style={{
-                        padding: "10px 14px", background: "rgba(13,13,13,0.92)", border: "1px solid #2a2a2a",
-                        borderRadius: "8px", color: "#e8e8e8", fontFamily: "'DM Sans', sans-serif", fontSize: "12px", fontWeight: 600,
-                        cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
-                      }}
-                    >
-                      <span style={{ fontSize: "14px" }}>📍</span> Center on me
-                    </button>
-                    <button
-                      type="button"
-                      onClick={loadStopsHere}
-                      disabled={nearbyLoading}
-                      style={{
-                        padding: "10px 14px", background: nearbyLoading ? "#2a2a2a" : "rgba(245,166,35,0.9)",
-                        border: "none", borderRadius: "8px", color: nearbyLoading ? "#555" : "#0a0a0a",
-                        fontFamily: "'DM Sans', sans-serif", fontSize: "12px", fontWeight: 700,
-                        cursor: nearbyLoading ? "default" : "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
-                      }}
-                    >
-                      Load stops here
-                    </button>
+                {nearbyLoading && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "20px 0", color: "#999", fontFamily: "'DM Sans', sans-serif", fontSize: "14px" }}>
+                    <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#555", animation: "blink 1s ease-in-out infinite" }} />
+                    Locating you…
                   </div>
-                </div>
-                <div style={{ marginTop: "14px" }}>
-                  {selectedIds.size > 0 ? (
-                    <>
-                      <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "11px", color: "#555", marginBottom: "8px" }}>
-                        {selectedIds.size} stop{selectedIds.size !== 1 ? "s" : ""} selected
-                      </div>
-                      <div style={{ maxHeight: "60px", overflowY: "auto", marginBottom: "10px" }}>
-                        {nearbyStops.filter((s) => selectedIds.has(s.idClean || (s.id || "").replace(/^MTA_/i, ""))).map((s) => (
-                          <div key={s.idClean || s.id} style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px", color: "#999", marginBottom: "2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {s.name || "Stop " + (s.idClean || s.id)}
+                )}
+                {!nearbyLoading && nearbyError && (
+                  <div style={{
+                    padding: "12px 14px", background: "rgba(255,80,80,0.08)", border: "1px solid rgba(255,80,80,0.2)",
+                    borderRadius: "8px", fontFamily: "'DM Sans', sans-serif", fontSize: "12px", color: "#ff9090", marginBottom: "12px",
+                  }}>
+                    {nearbyError}
+                    {nearbyError.indexOf("connection") !== -1 && (
+                      <span>{" "}<button type="button" onClick={retryNearby} style={{ background: "none", border: "none", color: "#F5A623", textDecoration: "underline", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit", padding: 0 }}>Retry</button></span>
+                    )}
+                  </div>
+                )}
+                {!nearbyLoading && !nearbyError && groupedStops.length > 0 && (
+                  <div style={{ paddingBottom: selectedIds.size > 0 ? "72px" : "0" }}>
+                    {groupedStops.map((group) => {
+                      const nearestDist = Math.min(...group.stops.map((s) => s.distanceM));
+                      return (
+                        <div key={group.route + group.direction} style={{ marginBottom: "20px" }}>
+                          <div style={{
+                            display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px",
+                            marginBottom: "8px", flexWrap: "wrap",
+                          }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                              <span style={{
+                                background: lineColor(group.route), color: "#0a0a0a",
+                                fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: "11px",
+                                padding: "4px 8px", borderRadius: "6px",
+                              }}>{group.route}</span>
+                              <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px", color: "#999" }}>{group.direction}</span>
+                            </div>
+                            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#555" }}>{formatDistanceNearby(nearestDist)}</span>
                           </div>
-                        ))}
-                      </div>
-                      <button
-                        onClick={addSelectedStops}
-                        style={{
-                          width: "100%", padding: "12px 18px", background: "#F5A623", color: "#0a0a0a",
-                          border: "none", borderRadius: "8px", fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "14px", cursor: "pointer",
-                        }}
-                      >
-                        Add Stop{selectedIds.size !== 1 ? "s" : ""}
-                      </button>
-                    </>
-                  ) : (
-                    <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px", color: "#555" }}>
-                      Tap stops on the map to select (max 4), then tap &quot;Add Stop(s)&quot;.
-                    </div>
-                  )}
-                </div>
+                          {group.stops.map((stop) => {
+                            const idClean = stop.idClean || (stop.id || "").replace(/^MTA_/i, "");
+                            const selected = selectedIds.has(idClean);
+                            return (
+                              <div
+                                key={stop.id || idClean}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => toggleStop(stop)}
+                                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleStop(stop); } }}
+                                style={{
+                                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
+                                  padding: "12px 14px", marginBottom: "6px",
+                                  borderLeft: "3px solid " + (selected ? "#F5A623" : "transparent"),
+                                  background: selected ? "rgba(245,166,35,0.06)" : "transparent",
+                                  borderRadius: "4px", cursor: "pointer",
+                                  border: "1px solid #1a1a1a",
+                                }}
+                              >
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "13px", color: "#e8e8e8", marginBottom: "2px" }}>{stop.name || "Stop " + idClean}</div>
+                                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#555" }}>{formatDistanceNearby(stop.distanceM)}</div>
+                                </div>
+                                <div style={{
+                                  width: "20px", height: "20px", borderRadius: "4px", border: "2px solid " + (selected ? "#F5A623" : "#444"),
+                                  background: selected ? "#F5A623" : "transparent",
+                                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                                }}>
+                                  {selected && <span style={{ color: "#0a0a0a", fontSize: "12px", fontWeight: 700 }}>✓</span>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {!nearbyLoading && !nearbyError && groupedStops.length === 0 && (
+                  <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "13px", color: "#555", padding: "16px 0" }}>
+                    No stops found nearby — try entering a Stop ID manually
+                  </div>
+                )}
               </>
             )}
           </div>
+          {tab === "nearby" && selectedIds.size > 0 && (
+            <div style={{
+              position: "sticky", bottom: 0, left: 0, right: 0,
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
+              padding: "14px 18px", background: "#0d0d0d", borderTop: "1px solid #1a1a1a",
+            }}>
+              <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "13px", color: "#999" }}>
+                {selectedIds.size} stop{selectedIds.size !== 1 ? "s" : ""} selected
+              </span>
+              <button
+                onClick={addSelectedStops}
+                style={{
+                  padding: "10px 18px", background: "#F5A623", color: "#0a0a0a",
+                  border: "none", borderRadius: "8px", fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "14px", cursor: "pointer",
+                }}
+              >
+                Add Stop(s)
+              </button>
+            </div>
+          )}
         </div>
       );
 
@@ -1170,14 +1121,16 @@
         <div
           style={{
             position: "fixed", inset: 0, zIndex: 1000,
-            background: "rgba(0,0,0,0.7)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            padding: "20px",
+            background: "rgba(0,0,0,0.92)",
+            display: "flex", alignItems: "flex-start", justifyContent: "center",
+            padding: "0 20px",
             animation: "modalIn 0.2s ease",
           }}
           onClick={close}
         >
-          {cardContent}
+          <div style={{ marginTop: "48px", width: "100%", maxWidth: "480px", marginLeft: "auto", marginRight: "auto" }}>
+            {cardContent}
+          </div>
         </div>
       );
     }
