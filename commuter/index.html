@@ -70,7 +70,7 @@
     const { useState, useEffect, useCallback, useRef } = React;
 
     /* ── config ──────────────────────────────────────────────── */
-    const APP_VERSION = "1.6.0"; // Semver: bump PATCH for fixes, MINOR for features, MAJOR for breaking changes
+    const APP_VERSION = "1.7.0"; // Semver: bump PATCH for fixes, MINOR for features, MAJOR for breaking changes
     const API_KEY = "5100a3c4-9704-43e4-b6d2-5d8adb10a124";
     const PROXY   = "https://mta-proxy-sundayontheroof.chief-b4a.workers.dev/?url=";
 
@@ -99,6 +99,10 @@
       const feet = Math.round(meters * 3.28084);
       if (feet < 1000) return feet + " ft";
       return (meters * 0.000621371).toFixed(1) + " mi";
+    }
+    function toTitleCase(str) {
+      if (!str || typeof str !== "string") return "";
+      return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
     }
     function inferDirection(stopName) {
       if (!stopName || typeof stopName !== "string") return "—";
@@ -825,10 +829,10 @@
       const [id, setId] = useState("");
       const [label, setLabel] = useState("");
       const inputRef = useRef();
-      const [nearbyStops, setNearbyStops] = useState([]);
-      const [nearbyLoading, setNearbyLoading] = useState(false);
+      const [nearbyGroups, setNearbyGroups] = useState([]);
+      const [nearbyLoadingPhase, setNearbyLoadingPhase] = useState(null); // "stops" | "arrivals" | null
       const [nearbyError, setNearbyError] = useState(null);
-      const [selectedIds, setSelectedIds] = useState(new Set());
+      const [selectedKeys, setSelectedKeys] = useState(new Set()); // "idClean|line|headsign"
       const nearbyFetched = useRef(false);
 
       const close = useCallback(() => {
@@ -836,9 +840,9 @@
         setTab("enterId");
         setId("");
         setLabel("");
-        setNearbyStops([]);
+        setNearbyGroups([]);
         setNearbyError(null);
-        setSelectedIds(new Set());
+        setSelectedKeys(new Set());
         onClose();
       }, [onClose]);
 
@@ -857,14 +861,15 @@
 
       const fetchNearby = useCallback(async (lat, lon) => {
         setNearbyError(null);
-        setNearbyLoading(true);
+        setNearbyLoadingPhase("stops");
         try {
-          const url = `https://bustime.mta.info/api/where/stops-for-location.json?key=${API_KEY}&lat=${lat}&lon=${lon}&latSpan=0.004&lonSpan=0.005&version=2`;
+          const url = `https://bustime.mta.info/api/where/stops-for-location.json?key=${API_KEY}&lat=${lat}&lon=${lon}&radius=400`;
           const res = await fetch(PROXY + encodeURIComponent(url));
           const rawText = await res.text();
           if (!res.ok) {
             setNearbyError("Couldn't load nearby stops — check your connection and try again");
-            setNearbyStops([]);
+            setNearbyGroups([]);
+            setNearbyLoadingPhase(null);
             return;
           }
           let data;
@@ -872,18 +877,20 @@
             data = JSON.parse(rawText);
           } catch (_) {
             setNearbyError("Couldn't load nearby stops — check your connection and try again");
-            setNearbyStops([]);
+            setNearbyGroups([]);
+            setNearbyLoadingPhase(null);
             return;
           }
           if (data.code !== undefined && data.code !== 200) {
             setNearbyError("Couldn't load nearby stops — check your connection and try again");
-            setNearbyStops([]);
+            setNearbyGroups([]);
+            setNearbyLoadingPhase(null);
             return;
           }
           const payload = data.data != null ? data.data : data;
           const list = Array.isArray(payload.list) ? payload.list : (Array.isArray(payload.stops) ? payload.stops : []);
           const refs = payload.references || {};
-          const withDistance = list.map((s) => {
+          const stopsWithMeta = list.map((s) => {
             const routeIds = s.routeIds || [];
             const routes = (refs.routes || []).filter((r) => routeIds.includes(r.id));
             const shortNames = routes.map((r) => r.shortName || r.id).filter(Boolean);
@@ -893,17 +900,64 @@
               idClean: (s.code != null ? String(s.code) : (s.id || "").replace(/^MTA_/i, "")),
               routeShortNames: shortNames,
               distanceM: meters,
+              distanceFt: Math.round(meters * 3.28084),
             };
           });
-          setNearbyStops(withDistance);
-          if (withDistance.length === 0) {
-            setNearbyError("No stops found nearby — try entering a Stop ID manually");
+
+          setNearbyLoadingPhase("arrivals");
+          const arrivalsUrls = stopsWithMeta.map((stop) =>
+            `https://bustime.mta.info/api/where/arrivals-and-departures-for-stop/MTA_${stop.idClean}.json?key=${API_KEY}&minutesBefore=0&minutesAfter=90`
+          );
+          const arrivalsResponses = await Promise.all(
+            arrivalsUrls.map((url) => fetch(PROXY + encodeURIComponent(url)).then((r) => r.json()).catch(() => null))
+          );
+
+          const groupMap = new Map();
+          const addStopToGroup = (line, headsign, stop) => {
+            const key = line + "|" + headsign;
+            if (!groupMap.has(key)) groupMap.set(key, { line, headsign, stops: [] });
+            const g = groupMap.get(key);
+            if (!g.stops.some((t) => (t.idClean || t.id) === (stop.idClean || stop.id))) g.stops.push(stop);
+          };
+
+          stopsWithMeta.forEach((stop, i) => {
+            const resp = arrivalsResponses[i];
+            const entry = resp?.data?.entry;
+            const arrivals = entry?.arrivalsAndDepartures || [];
+            const seen = new Set();
+            if (arrivals.length > 0) {
+              arrivals.forEach((a) => {
+                const line = a.routeShortName || "";
+                const headsign = (a.tripHeadsign || "").trim().toUpperCase() || "—";
+                if (!line) return;
+                const pair = line + "|" + headsign;
+                if (seen.has(pair)) return;
+                seen.add(pair);
+                addStopToGroup(line, headsign, stop);
+              });
+            } else {
+              const fallbackLine = (stop.routeShortNames && stop.routeShortNames[0]) || "?";
+              const fallbackHeadsign = (stop.name || "Unknown").trim().toUpperCase();
+              addStopToGroup(fallbackLine, fallbackHeadsign, stop);
+            }
+          });
+
+          const groups = Array.from(groupMap.values());
+          groups.forEach((g) => g.stops.sort((a, b) => a.distanceM - b.distanceM));
+          groups.sort((a, b) => {
+            const minA = Math.min(...a.stops.map((s) => s.distanceM));
+            const minB = Math.min(...b.stops.map((s) => s.distanceM));
+            return minA - minB;
+          });
+          setNearbyGroups(groups);
+          if (groups.length === 0) {
+            setNearbyError("No active stops found nearby — try entering a Stop ID manually");
           }
         } catch (e) {
           setNearbyError("Couldn't load nearby stops — check your connection and try again");
-          setNearbyStops([]);
+          setNearbyGroups([]);
         } finally {
-          setNearbyLoading(false);
+          setNearbyLoadingPhase(null);
         }
       }, []);
 
@@ -912,18 +966,18 @@
         if (nearbyFetched.current) return;
         nearbyFetched.current = true;
         setNearbyError(null);
-        setNearbyStops([]);
+        setNearbyGroups([]);
         if (!navigator.geolocation) {
           setNearbyError("Location access denied — use the Enter ID tab instead");
-          setNearbyLoading(false);
+          setNearbyLoadingPhase(null);
           return;
         }
-        setNearbyLoading(true);
+        setNearbyLoadingPhase("stops");
         navigator.geolocation.getCurrentPosition(
           (pos) => fetchNearby(pos.coords.latitude, pos.coords.longitude),
           () => {
             setNearbyError("Location access denied — use the Enter ID tab instead");
-            setNearbyLoading(false);
+            setNearbyLoadingPhase(null);
             nearbyFetched.current = false;
           },
           { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
@@ -936,37 +990,25 @@
         onTabNearby();
       };
 
-      const toggleStop = (stop) => {
+      const SEL_SEP = "\u0001";
+      const toggleStop = (stop, group) => {
         const idClean = stop.idClean || (stop.id || "").replace(/^MTA_/i, "");
-        setSelectedIds((prev) => {
+        const key = idClean + SEL_SEP + group.line + SEL_SEP + group.headsign;
+        setSelectedKeys((prev) => {
           const next = new Set(prev);
-          if (next.has(idClean)) next.delete(idClean);
-          else next.add(idClean);
+          if (next.has(key)) next.delete(key);
+          else next.add(key);
           return next;
         });
       };
 
       const addSelectedStops = () => {
-        const toAdd = nearbyStops.filter((s) => selectedIds.has(s.idClean || (s.id || "").replace(/^MTA_/i, "")));
-        toAdd.forEach((s) => onAdd({ id: s.idClean || s.id, label: s.name || "" }));
+        selectedKeys.forEach((key) => {
+          const [idClean, line, headsign] = key.split(SEL_SEP);
+          onAdd({ id: idClean, label: line + " → " + toTitleCase(headsign || "") });
+        });
         close();
       };
-
-      // Group by route, then by direction; sort groups by nearest stop distance
-      const groupedStops = (() => {
-        const map = new Map();
-        nearbyStops.forEach((stop) => {
-          const route = (stop.routeShortNames && stop.routeShortNames[0]) || "?";
-          const direction = inferDirection(stop.name);
-          const key = route + "|" + direction;
-          if (!map.has(key)) map.set(key, { route, direction, stops: [] });
-          map.get(key).stops.push(stop);
-        });
-        const groups = Array.from(map.values());
-        groups.forEach((g) => g.stops.sort((a, b) => a.distanceM - b.distanceM));
-        groups.sort((a, b) => Math.min(...a.stops.map((s) => s.distanceM)) - Math.min(...b.stops.map((s) => s.distanceM)));
-        return groups;
-      })();
 
       const cardContent = (
         <div
@@ -1061,13 +1103,19 @@
             )}
             {tab === "nearby" && (
               <>
-                {nearbyLoading && (
+                {nearbyLoadingPhase === "stops" && (
                   <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "20px 0", color: "#999", fontFamily: "'DM Sans', sans-serif", fontSize: "14px" }}>
                     <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#555", animation: "blink 1s ease-in-out infinite" }} />
-                    Locating you…
+                    Finding nearby stops…
                   </div>
                 )}
-                {!nearbyLoading && nearbyError && (
+                {nearbyLoadingPhase === "arrivals" && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "20px 0", color: "#999", fontFamily: "'DM Sans', sans-serif", fontSize: "14px" }}>
+                    <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#555", animation: "blink 1s ease-in-out infinite" }} />
+                    Loading arrivals…
+                  </div>
+                )}
+                {!nearbyLoadingPhase && nearbyError && (
                   <div style={{
                     padding: "12px 14px", background: "rgba(255,80,80,0.08)", border: "1px solid rgba(255,80,80,0.2)",
                     borderRadius: "8px", fontFamily: "'DM Sans', sans-serif", fontSize: "12px", color: "#ff9090", marginBottom: "12px",
@@ -1078,36 +1126,37 @@
                     )}
                   </div>
                 )}
-                {!nearbyLoading && !nearbyError && groupedStops.length > 0 && (
-                  <div style={{ paddingBottom: selectedIds.size > 0 ? "72px" : "0" }}>
-                    {groupedStops.map((group) => {
+                {!nearbyLoadingPhase && !nearbyError && nearbyGroups.length > 0 && (
+                  <div style={{ paddingBottom: selectedKeys.size > 0 ? "72px" : "0" }}>
+                    {nearbyGroups.map((group) => {
                       const nearestDist = Math.min(...group.stops.map((s) => s.distanceM));
                       return (
-                        <div key={group.route + group.direction} style={{ marginBottom: "20px" }}>
+                        <div key={group.line + "|" + group.headsign} style={{ marginBottom: "20px" }}>
                           <div style={{
                             display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px",
                             marginBottom: "8px", flexWrap: "wrap",
                           }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                               <span style={{
-                                background: lineColor(group.route), color: "#0a0a0a",
+                                background: lineColor(group.line), color: "#0a0a0a",
                                 fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: "11px",
                                 padding: "4px 8px", borderRadius: "6px",
-                              }}>{group.route}</span>
-                              <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px", color: "#999" }}>{group.direction}</span>
+                              }}>{group.line}</span>
+                              <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px", color: "#999" }}>→ {toTitleCase(group.headsign)}</span>
                             </div>
-                            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#555" }}>{formatDistanceNearby(nearestDist)}</span>
+                            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#444", marginLeft: "auto" }}>{formatDistanceNearby(nearestDist)}</span>
                           </div>
                           {group.stops.map((stop) => {
                             const idClean = stop.idClean || (stop.id || "").replace(/^MTA_/i, "");
-                            const selected = selectedIds.has(idClean);
+                            const key = idClean + SEL_SEP + group.line + SEL_SEP + group.headsign;
+                            const selected = selectedKeys.has(key);
                             return (
                               <div
-                                key={stop.id || idClean}
+                                key={stop.id || idClean + group.line + group.headsign}
                                 role="button"
                                 tabIndex={0}
-                                onClick={() => toggleStop(stop)}
-                                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleStop(stop); } }}
+                                onClick={() => toggleStop(stop, group)}
+                                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleStop(stop, group); } }}
                                 style={{
                                   display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
                                   padding: "12px 14px", marginBottom: "6px",
@@ -1118,7 +1167,7 @@
                                 }}
                               >
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "13px", color: "#e8e8e8", marginBottom: "2px" }}>{stop.name || "Stop " + idClean}</div>
+                                  <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "14px", color: "#e8e8e8", marginBottom: "2px" }}>{stop.name || "Stop " + idClean}</div>
                                   <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#555" }}>{formatDistanceNearby(stop.distanceM)}</div>
                                 </div>
                                 <div style={{
@@ -1136,22 +1185,22 @@
                     })}
                   </div>
                 )}
-                {!nearbyLoading && !nearbyError && groupedStops.length === 0 && (
+                {!nearbyLoadingPhase && !nearbyError && nearbyGroups.length === 0 && (
                   <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "13px", color: "#555", padding: "16px 0" }}>
-                    No stops found nearby — try entering a Stop ID manually
+                    No active stops found nearby — try entering a Stop ID manually
                   </div>
                 )}
               </>
             )}
           </div>
-          {tab === "nearby" && selectedIds.size > 0 && (
+          {tab === "nearby" && selectedKeys.size > 0 && (
             <div style={{
               position: "sticky", bottom: 0, left: 0, right: 0,
               display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
               padding: "14px 18px", background: "#0d0d0d", borderTop: "1px solid #1a1a1a",
             }}>
               <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "13px", color: "#999" }}>
-                {selectedIds.size} stop{selectedIds.size !== 1 ? "s" : ""} selected
+                {selectedKeys.size} stop{selectedKeys.size !== 1 ? "s" : ""} selected
               </span>
               <button
                 onClick={addSelectedStops}
