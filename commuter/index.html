@@ -486,7 +486,7 @@
         };
       });
     }
-    function BusRow({ bus, onOpenMap }) {
+    function BusRow({ bus, onOpenMap, onBellToggle, isTracked, showDenied }) {
       const color      = lineColor(bus.line);
       const isoTime    = bus.expectedArrival || bus.aimedArrival;
       const minutes    = isoTime ? minutesUntil(isoTime) : null;
@@ -507,63 +507,90 @@
       const borderColor = isRedAlert ? "#ff3c3c" : isYellowAlert ? "#f5c823" : color;
 
       return (
-        <div
-          onClick={() => onOpenMap(bus)}
-          style={{
-            display: "flex", alignItems: "center", gap: "14px",
-            padding: "13px 16px",
-            ...bgStyle,
-            borderLeft: `3px solid ${borderColor}`,
-            borderRadius: "2px 8px 8px 2px",
-            marginBottom: "8px",
-            cursor: "pointer",
-            transition: "border-color 0.3s ease",
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(1.15)"}
-          onMouseLeave={(e) => e.currentTarget.style.filter = "brightness(1)"}
-        >
-          {/* line badge */}
-          <div style={{
-            background: color, color: "#0a0a0a",
-            fontFamily: "'DM Mono', monospace", fontWeight: 700,
-            fontSize: "12px", padding: "5px 9px", borderRadius: "5px",
-            minWidth: "42px", textAlign: "center", flexShrink: 0, letterSpacing: "0.3px",
-          }}>{bus.line || "?"}</div>
-
-          {/* destination + distance */}
-          <div style={{ flex: 1, minWidth: 0 }}>
+        <>
+          <div
+            onClick={() => onOpenMap(bus)}
+            style={{
+              display: "flex", alignItems: "center", gap: "14px",
+              padding: "13px 16px",
+              ...bgStyle,
+              borderLeft: `3px solid ${borderColor}`,
+              borderRadius: "2px 8px 8px 2px",
+              marginBottom: showDenied ? "0" : "8px",
+              cursor: "pointer",
+              transition: "border-color 0.3s ease",
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(1.15)"}
+            onMouseLeave={(e) => e.currentTarget.style.filter = "brightness(1)"}
+          >
+            {/* line badge */}
             <div style={{
-              fontFamily: "'DM Sans', sans-serif", fontSize: "13px", color: "#999",
-              textTransform: "uppercase", letterSpacing: "0.4px",
-              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-            }}>→ {bus.destination}</div>
-            {bus.presentableDistance && (
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "10px", color: "#444", marginTop: "2px" }}>
-                {bus.presentableDistance}{bus.stopsAway != null && !bus.presentableDistance?.toLowerCase().includes("stop") ? ` · ${bus.stopsAway} stop${bus.stopsAway !== 1 ? "s" : ""} away` : ""}
-              </div>
-            )}
-          </div>
+              background: color, color: "#0a0a0a",
+              fontFamily: "'DM Mono', monospace", fontWeight: 700,
+              fontSize: "12px", padding: "5px 9px", borderRadius: "5px",
+              minWidth: "42px", textAlign: "center", flexShrink: 0, letterSpacing: "0.3px",
+            }}>{bus.line || "?"}</div>
 
-          {/* countdown + map hint */}
-          <div style={{ textAlign: "right", flexShrink: 0 }}>
-            {minutes !== null ? (
-              <>
+            {/* destination + distance */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontFamily: "'DM Sans', sans-serif", fontSize: "13px", color: "#999",
+                textTransform: "uppercase", letterSpacing: "0.4px",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}>→ {bus.destination}</div>
+              {bus.presentableDistance && (
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "10px", color: "#444", marginTop: "2px" }}>
+                  {bus.presentableDistance}{bus.stopsAway != null && !bus.presentableDistance?.toLowerCase().includes("stop") ? ` · ${bus.stopsAway} stop${bus.stopsAway !== 1 ? "s" : ""} away` : ""}
+                </div>
+              )}
+            </div>
+
+            {/* bell toggle */}
+            <button
+              onClick={(e) => { e.stopPropagation(); onBellToggle && onBellToggle(bus, e); }}
+              style={{
+                background: isTracked ? "rgba(245,166,35,0.12)" : "transparent",
+                border: "none", cursor: "pointer",
+                width: "32px", height: "32px",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                borderRadius: "6px", flexShrink: 0, padding: 0,
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke={isTracked ? "#F5A623" : "#2e2e2e"}
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+            </button>
+
+            {/* countdown + map hint */}
+            <div style={{ textAlign: "right", flexShrink: 0 }}>
+              {minutes !== null ? (
+                <>
+                  <div style={{
+                    fontFamily: "'DM Mono', monospace", fontWeight: 700,
+                    fontSize: "24px", lineHeight: 1,
+                    color: isRedAlert ? "#ff3c3c" : isYellowAlert ? "#f5c823" : isImminent ? color : "#e8e8e8",
+                  }}>{minutes <= 0 ? "NOW" : minutes}</div>
+                  {minutes > 0 && <div style={{ fontSize: "10px", color: "#444", fontFamily: "'DM Sans', sans-serif", marginTop: "2px" }}>min</div>}
+                </>
+              ) : (
                 <div style={{
                   fontFamily: "'DM Mono', monospace", fontWeight: 700,
-                  fontSize: "24px", lineHeight: 1,
-                  color: isRedAlert ? "#ff3c3c" : isYellowAlert ? "#f5c823" : isImminent ? color : "#e8e8e8",
-                }}>{minutes <= 0 ? "NOW" : minutes}</div>
-                {minutes > 0 && <div style={{ fontSize: "10px", color: "#444", fontFamily: "'DM Sans', sans-serif", marginTop: "2px" }}>min</div>}
-              </>
-            ) : (
-              <div style={{
-                fontFamily: "'DM Mono', monospace", fontWeight: 700,
-                fontSize: "24px", lineHeight: 1, color,
-              }}>NOW</div>
-            )}
-            <div style={{ fontSize: "9px", color: "#2e2e2e", fontFamily: "'DM Mono', monospace", marginTop: "4px", letterSpacing: "0.5px" }}></div>
+                  fontSize: "24px", lineHeight: 1, color,
+                }}>NOW</div>
+              )}
+              <div style={{ fontSize: "9px", color: "#2e2e2e", fontFamily: "'DM Mono', monospace", marginTop: "4px", letterSpacing: "0.5px" }}></div>
+            </div>
           </div>
-        </div>
+          {showDenied && (
+            <div style={{
+              fontFamily: "'DM Sans', sans-serif", fontSize: "11px", color: "#ff5050",
+              padding: "4px 16px 8px", marginBottom: "8px",
+            }}>Enable notifications in your browser settings</div>
+          )}
+        </>
       );
     }
 
@@ -631,6 +658,21 @@
       );
     }
 
+    /* ── triggerAlert ────────────────────────────────────────── */
+    function triggerAlert(bus, mins) {
+      const label = `${bus.line} → ${bus.destination}`;
+      const body  = mins <= 0 ? "Arriving now" : `Arriving in ~${mins} min`;
+      if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        new Notification(label, {
+          body,
+          icon: "/favicon.ico",
+          tag: `bus-alert-${bus.line}`,
+          renotify: false,
+        });
+      }
+    }
+
     /* ── StopPanel ───────────────────────────────────────────── */
     function StopPanel({ index, stopId, label, onRemove, onRename, onOpenMap, onDataUpdated }) {
       const [buses,           setBuses]           = useState([]);
@@ -641,6 +683,22 @@
       const [isEditing,       setIsEditing]       = useState(false);
       const [hoverHeader,     setHoverHeader]     = useState(false);
       const editInputRef      = useRef(null);
+
+      const [trackedAlerts, setTrackedAlerts] = useState(() => {
+        try {
+          const stored = JSON.parse(localStorage.getItem("mta-alerts") || "[]");
+          const now = Date.now();
+          const future = stored.filter(key => {
+            const isoDate = key.substring(key.indexOf("_") + 1);
+            const t = new Date(isoDate).getTime();
+            return !isNaN(t) && t > now;
+          });
+          return new Set(future);
+        } catch { return new Set(); }
+      });
+      const trackedAlertsRef = useRef(new Set());
+      const firedAlerts      = useRef(new Set());
+      const [deniedBusKey,   setDeniedBusKey] = useState(null);
 
       const displayId = (stopId || "").replace(/^MTA_/i, "");
       const primaryLabel = (label && label.trim()) ? label.trim() : (stopNameFromApi || displayId);
@@ -663,6 +721,33 @@
         setIsEditing(false);
       };
       const handleCancelEdit = () => setIsEditing(false);
+
+      useEffect(() => {
+        trackedAlertsRef.current = trackedAlerts;
+        try { localStorage.setItem("mta-alerts", JSON.stringify([...trackedAlerts])); } catch {}
+      }, [trackedAlerts]);
+
+      const handleBellToggle = useCallback((bus, e) => {
+        e.stopPropagation();
+        const key = `${bus.line}_${bus.aimedArrival}`;
+        if (trackedAlerts.has(key)) {
+          setTrackedAlerts(prev => { const n = new Set(prev); n.delete(key); return n; });
+          return;
+        }
+        const toggle = () => setTrackedAlerts(prev => new Set([...prev, key]));
+        const showDenied = () => {
+          setDeniedBusKey(key);
+          setTimeout(() => setDeniedBusKey(null), 4000);
+        };
+        if (typeof Notification === "undefined") { toggle(); return; }
+        if (Notification.permission === "default") {
+          Notification.requestPermission().then(perm => { if (perm === "granted") toggle(); else showDenied(); });
+        } else if (Notification.permission === "granted") {
+          toggle();
+        } else {
+          showDenied();
+        }
+      }, [trackedAlerts]);
 
       const fetchData = useCallback(async () => {
         if (!stopId) return;
@@ -694,7 +779,18 @@
             });
           });
 
-          setBuses([...realtime, ...unmatched]);
+          const freshBuses = [...realtime, ...unmatched];
+          setBuses(freshBuses);
+          freshBuses.forEach((bus) => {
+            const iso = bus.expectedArrival || bus.aimedArrival;
+            if (!iso) return;
+            const mins = minutesUntil(iso);
+            const key = `${bus.line}_${bus.aimedArrival}`;
+            if (trackedAlertsRef.current.has(key) && mins <= 10 && mins >= 0 && !firedAlerts.current.has(key)) {
+              firedAlerts.current.add(key);
+              triggerAlert(bus, mins);
+            }
+          });
           const updated = new Date();
           setLastUpdated(updated);
           onDataUpdated?.(updated);
@@ -708,7 +804,7 @@
       useEffect(() => {
         fetchData();
         const t = setInterval(fetchData, 30000);
-        return () => clearInterval(t);
+        return () => { clearInterval(t); firedAlerts.current = new Set(); };
       }, [fetchData]);
 
       const visible = buses
@@ -792,7 +888,14 @@
             visible.map((bus, i) => (
               bus.isScheduled
                 ? <ScheduledBusRow key={i} bus={bus} />
-                : <BusRow key={i} bus={bus} onOpenMap={(tapped) => onOpenMap(tapped, visible.filter(b => b.line === tapped.line), stopId, tapped.line)} />
+                : <BusRow
+                    key={i}
+                    bus={bus}
+                    onOpenMap={(tapped) => onOpenMap(tapped, visible.filter(b => b.line === tapped.line), stopId, tapped.line)}
+                    onBellToggle={handleBellToggle}
+                    isTracked={trackedAlerts.has(`${bus.line}_${bus.aimedArrival}`)}
+                    showDenied={deniedBusKey === `${bus.line}_${bus.aimedArrival}`}
+                  />
             ))
           )}
         </div>
