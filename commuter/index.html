@@ -662,19 +662,20 @@
     function triggerAlert(bus, mins) {
       const label = `${bus.line} → ${bus.destination}`;
       const body  = mins <= 0 ? "Arriving now" : `Arriving in ~${mins} min`;
+      const tag   = `bus-alert-${bus.line}_${bus.aimedArrival || bus.expectedArrival || ""}`;
       if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
       if (typeof Notification !== "undefined" && Notification.permission === "granted") {
         new Notification(label, {
           body,
           icon: "/favicon.ico",
-          tag: `bus-alert-${bus.line}`,
+          tag,
           renotify: false,
         });
       }
     }
 
     /* ── StopPanel ───────────────────────────────────────────── */
-    function StopPanel({ index, stopId, label, onRemove, onRename, onOpenMap, onDataUpdated }) {
+    function StopPanel({ index, stopId, label, trackedAlerts, onAddTrackedAlert, onRemoveTrackedAlert, onRemove, onRename, onOpenMap, onDataUpdated }) {
       const [buses,           setBuses]           = useState([]);
       const [loading,         setLoading]         = useState(false);
       const [lastUpdated,     setLastUpdated]     = useState(null);
@@ -684,18 +685,6 @@
       const [hoverHeader,     setHoverHeader]     = useState(false);
       const editInputRef      = useRef(null);
 
-      const [trackedAlerts, setTrackedAlerts] = useState(() => {
-        try {
-          const stored = JSON.parse(localStorage.getItem("mta-alerts") || "[]");
-          const now = Date.now();
-          const future = stored.filter(key => {
-            const isoDate = key.substring(key.indexOf("_") + 1);
-            const t = new Date(isoDate).getTime();
-            return !isNaN(t) && t > now;
-          });
-          return new Set(future);
-        } catch { return new Set(); }
-      });
       const trackedAlertsRef = useRef(new Set());
       const firedAlerts      = useRef(new Set());
       const [deniedBusKey,   setDeniedBusKey] = useState(null);
@@ -724,30 +713,30 @@
 
       useEffect(() => {
         trackedAlertsRef.current = trackedAlerts;
-        try { localStorage.setItem("mta-alerts", JSON.stringify([...trackedAlerts])); } catch {}
       }, [trackedAlerts]);
 
       const handleBellToggle = useCallback((bus, e) => {
         e.stopPropagation();
-        const key = `${bus.line}_${bus.aimedArrival}`;
+        const arrival = bus.aimedArrival || bus.expectedArrival;
+        if (!arrival) return;
+        const key = `${bus.line}_${arrival}`;
         if (trackedAlerts.has(key)) {
-          setTrackedAlerts(prev => { const n = new Set(prev); n.delete(key); return n; });
+          onRemoveTrackedAlert(key);
           return;
         }
-        const toggle = () => setTrackedAlerts(prev => new Set([...prev, key]));
         const showDenied = () => {
           setDeniedBusKey(key);
           setTimeout(() => setDeniedBusKey(null), 4000);
         };
-        if (typeof Notification === "undefined") { toggle(); return; }
+        if (typeof Notification === "undefined") { onAddTrackedAlert(key); return; }
         if (Notification.permission === "default") {
-          Notification.requestPermission().then(perm => { if (perm === "granted") toggle(); else showDenied(); });
+          Notification.requestPermission().then((perm) => { if (perm === "granted") onAddTrackedAlert(key); else showDenied(); });
         } else if (Notification.permission === "granted") {
-          toggle();
+          onAddTrackedAlert(key);
         } else {
           showDenied();
         }
-      }, [trackedAlerts]);
+      }, [trackedAlerts, onAddTrackedAlert, onRemoveTrackedAlert]);
 
       const fetchData = useCallback(async () => {
         if (!stopId) return;
@@ -785,7 +774,7 @@
             const iso = bus.expectedArrival || bus.aimedArrival;
             if (!iso) return;
             const mins = minutesUntil(iso);
-            const key = `${bus.line}_${bus.aimedArrival}`;
+            const key = `${bus.line}_${bus.aimedArrival || bus.expectedArrival}`;
             if (trackedAlertsRef.current.has(key) && mins <= 10 && mins >= 0 && !firedAlerts.current.has(key)) {
               firedAlerts.current.add(key);
               triggerAlert(bus, mins);
@@ -893,8 +882,8 @@
                     bus={bus}
                     onOpenMap={(tapped) => onOpenMap(tapped, visible.filter(b => b.line === tapped.line), stopId, tapped.line)}
                     onBellToggle={handleBellToggle}
-                    isTracked={trackedAlerts.has(`${bus.line}_${bus.aimedArrival}`)}
-                    showDenied={deniedBusKey === `${bus.line}_${bus.aimedArrival}`}
+                    isTracked={(bus.aimedArrival || bus.expectedArrival) != null && trackedAlerts.has(`${bus.line}_${bus.aimedArrival || bus.expectedArrival}`)}
+                    showDenied={deniedBusKey === `${bus.line}_${bus.aimedArrival || bus.expectedArrival}`}
                   />
             ))
           )}
@@ -1358,6 +1347,25 @@
       const [dataLastUpdated, setDataLastUpdated] = useState(null);
       const [mapData, setMapData] = useState(null); // { bus, fleet, stopId, line }
       const [addModalOpen, setAddModalOpen] = useState(false);
+      const [trackedAlerts, setTrackedAlerts] = useState(() => {
+        try {
+          const stored = JSON.parse(localStorage.getItem("mta-alerts") || "[]");
+          const now = Date.now();
+          const future = stored.filter((key) => {
+            const isoDate = key.substring(key.indexOf("_") + 1);
+            const t = new Date(isoDate).getTime();
+            return !isNaN(t) && t > now;
+          });
+          return new Set(future);
+        } catch { return new Set(); }
+      });
+
+      useEffect(() => {
+        try { localStorage.setItem("mta-alerts", JSON.stringify([...trackedAlerts])); } catch {}
+      }, [trackedAlerts]);
+
+      const addTrackedAlert = (key) => setTrackedAlerts((prev) => new Set([...prev, key]));
+      const removeTrackedAlert = (key) => setTrackedAlerts((prev) => { const n = new Set(prev); n.delete(key); return n; });
 
       const saveStops  = (u) => { setStops(u); try { localStorage.setItem("mta-stops", JSON.stringify(u)); } catch {} };
       const addStop    = (s) => setStops((prev) => { const next = [...prev, s]; try { localStorage.setItem("mta-stops", JSON.stringify(next)); } catch {} return next; });
@@ -1406,6 +1414,9 @@
                 index={i}
                 stopId={stop.id}
                 label={stop.label}
+                trackedAlerts={trackedAlerts}
+                onAddTrackedAlert={addTrackedAlert}
+                onRemoveTrackedAlert={removeTrackedAlert}
                 onRemove={() => removeStop(i)}
                 onRename={renameStop}
                 onOpenMap={(bus, fleet, stopId, line) => setMapData({ bus, fleet, stopId, line })}
