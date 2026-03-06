@@ -6,7 +6,9 @@ Currently looking for my next gig to support teams ship the right product to hel
 
 Before that I worked at Kettle to build transformative digital product experiences for brands like Nat Geo, Apple, SoFi, Zocdoc, etc.
 
-I develop my own photos, plant a lot things, read some books.
+I develop my own photos, plant a lot things, read some sci-fit/fantasy books. 
+
+Curren, I am on a mission to create my own self-hosted, private E2E encrypted cloud server and messaging app for my family and myself. All built with guidance from Claude Code.
 
 Not really good with social media but you can find me on <a href="https://www.linkedin.com/in/kevinvillert/">Linkedin</a> or simply shoot me an <a href="mailto:chief@sundayontheroof.com">email.
 
