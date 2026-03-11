@@ -145,7 +145,7 @@
           stopsAway:           parseInt(xmlText(dist, "StopsFromCall"), 10) || null,
           vehicleLat:          loc ? parseFloat(xmlText(loc, "Latitude"))  : null,
           vehicleLng:          loc ? parseFloat(xmlText(loc, "Longitude")) : null,
-          shapeRef:            xmlText(mvj, "ShapeRef") || null,
+          shapeRef:            xmlText(mvj, "JourneyPatternRef") || null,
         };
       });
     }
