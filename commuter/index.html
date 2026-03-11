@@ -145,8 +145,34 @@
           stopsAway:           parseInt(xmlText(dist, "StopsFromCall"), 10) || null,
           vehicleLat:          loc ? parseFloat(xmlText(loc, "Latitude"))  : null,
           vehicleLng:          loc ? parseFloat(xmlText(loc, "Longitude")) : null,
+          shapeRef:            xmlText(mvj, "ShapeRef") || null,
         };
       });
+    }
+
+    /* ── Route shape utilities ──────────────────────────────── */
+    function decodePolyline(encoded) {
+      const points = [];
+      let index = 0, lat = 0, lng = 0;
+      while (index < encoded.length) {
+        let shift = 0, result = 0, b;
+        do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+        lat += (result & 1) ? ~(result >> 1) : result >> 1;
+        shift = 0; result = 0;
+        do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+        lng += (result & 1) ? ~(result >> 1) : result >> 1;
+        points.push([lat / 1e5, lng / 1e5]);
+      }
+      return points;
+    }
+
+    function closestPointIndex(points, lat, lng) {
+      let minDist = Infinity, minIdx = 0;
+      points.forEach(([pLat, pLng], i) => {
+        const d = Math.pow(pLat - lat, 2) + Math.pow(pLng - lng, 2);
+        if (d < minDist) { minDist = d; minIdx = i; }
+      });
+      return minIdx;
     }
 
     /* ── MapModal ────────────────────────────────────────────── */
@@ -157,12 +183,40 @@
       const stopMarker    = useRef(null); // 🚏 bus stop pin
       const fleetMarkers  = useRef([]);
       const stopCoords    = useRef(null); // { lat, lng } cached after first fetch
+      const routeLayersRef = useRef([]); // [ghostLayer, activeSegmentLayer]
+      const routePointsRef = useRef(null); // decoded polyline points
       const color         = lineColor(bus.line);
       const [refreshing,   setRefreshing]  = useState(false);
       const [lastRefresh,  setLastRefresh] = useState(null);
       const isRefreshing  = useRef(false); // stable guard — avoids refresh() being recreated on state change
 
       const GEO_OPTS = { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 };
+
+      // ── draw active segment polyline (bus → stop) ──────────
+      const drawActiveSegment = useCallback((busLat, busLng) => {
+        const map = leafletRef.current;
+        const pts = routePointsRef.current;
+        if (!map || !pts || busLat == null || busLng == null) return;
+        // Remove old active segment (index 1)
+        if (routeLayersRef.current[1]) {
+          map.removeLayer(routeLayersRef.current[1]);
+          routeLayersRef.current[1] = null;
+        }
+        const busIdx = closestPointIndex(pts, busLat, busLng);
+        const stopEnd = stopCoords.current
+          ? closestPointIndex(pts, stopCoords.current.lat, stopCoords.current.lng)
+          : pts.length - 1;
+        const start = Math.min(busIdx, stopEnd);
+        const end   = Math.max(busIdx, stopEnd);
+        const segment = pts.slice(start, end + 1);
+        if (segment.length < 2) return;
+        const routeColor = lineColor(bus.line);
+        const layer = L.polyline(segment, {
+          color: routeColor, weight: 4, opacity: 0.75,
+          lineCap: "round", lineJoin: "round",
+        }).addTo(map);
+        routeLayersRef.current[1] = layer;
+      }, [bus.line]);
 
       // ── plot fleet markers (called on load + refresh) ──────────
       const plotFleet = useCallback((busArray, tappedBus) => {
@@ -211,6 +265,34 @@
             return m >= -1 && m <= 30;
           });
           plotFleet(freshFleet, bus);
+          // Redraw active segment with updated bus position
+          let freshBus = null;
+          const tappedTime = bus.expectedArrival || bus.aimedArrival;
+          // Prefer matching by schedule time when available
+          if (tappedTime) {
+            freshBus = freshFleet.find(b =>
+              b.line === bus.line &&
+              (b.expectedArrival || b.aimedArrival) === tappedTime
+            ) || null;
+          }
+          // Fallback: match by closest GPS position on same line when there is no reliable time
+          if (!freshBus && bus.vehicleLat != null && bus.vehicleLng != null) {
+            let best = null;
+            let bestDist = Infinity;
+            freshFleet.forEach(b => {
+              if (b.line !== bus.line || b.vehicleLat == null || b.vehicleLng == null) return;
+              const d = distanceMeters(bus.vehicleLat, bus.vehicleLng, b.vehicleLat, b.vehicleLng);
+              if (d < bestDist) {
+                bestDist = d;
+                best = b;
+              }
+            });
+            freshBus = best;
+          }
+          if (!freshBus) freshBus = bus;
+          if (freshBus.vehicleLat != null && freshBus.vehicleLng != null) {
+            drawActiveSegment(freshBus.vehicleLat, freshBus.vehicleLng);
+          }
           setLastRefresh(new Date());
         } catch (e) {
           console.error("Map refresh failed:", e);
@@ -218,7 +300,7 @@
           isRefreshing.current = false;
           setRefreshing(false);
         }
-      }, [stopId, line, bus, plotFleet]);
+      }, [stopId, line, bus, plotFleet, drawActiveSegment]);
 
       // Center map on user location
       const centerOnUser = useCallback(() => {
@@ -296,6 +378,33 @@
             }
           })
           .catch((e) => console.warn("Stop fetch failed:", e));
+
+        // ── fetch route shape and draw polyline ──────────
+        if (bus.shapeRef) {
+          fetch(PROXY + encodeURIComponent(
+            `https://bustime.mta.info/api/where/shape/${bus.shapeRef}.json?key=${API_KEY}`
+          ))
+            .then(r => r.json())
+            .then(data => {
+              const encoded = data?.data?.entry?.points;
+              if (!encoded) return;
+              const pts = decodePolyline(encoded);
+              if (pts.length < 2) return;
+              routePointsRef.current = pts;
+              const routeColor = lineColor(bus.line);
+              // Layer 1: full route ghost
+              const ghost = L.polyline(pts, {
+                color: routeColor, weight: 3, opacity: 0.25,
+                lineCap: "round", lineJoin: "round",
+              }).addTo(map);
+              routeLayersRef.current[0] = ghost;
+              // Layer 2: active segment (bus → stop)
+              if (bus.vehicleLat != null && bus.vehicleLng != null) {
+                drawActiveSegment(bus.vehicleLat, bus.vehicleLng);
+              }
+            })
+            .catch(() => {}); // fail silently
+        }
 
         // Plot initial fleet
         plotFleet(fleet || [bus], bus);
