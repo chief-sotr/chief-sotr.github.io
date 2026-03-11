@@ -545,24 +545,26 @@
               )}
             </div>
 
-            {/* bell toggle */}
-            <button
-              onClick={(e) => { e.stopPropagation(); onBellToggle && onBellToggle(bus, e); }}
-              style={{
-                background: isTracked ? "rgba(245,166,35,0.12)" : "transparent",
-                border: "none", cursor: "pointer",
-                width: "32px", height: "32px",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                borderRadius: "6px", flexShrink: 0, padding: 0,
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                stroke={isTracked ? "#F5A623" : "#2e2e2e"}
-                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-              </svg>
-            </button>
+            {/* bell toggle – hidden on iOS where Web Notifications aren't supported */}
+            {!isIOS && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onBellToggle && onBellToggle(bus, e); }}
+                style={{
+                  background: isTracked ? "rgba(245,166,35,0.12)" : "transparent",
+                  border: "none", cursor: "pointer",
+                  width: "32px", height: "32px",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  borderRadius: "6px", flexShrink: 0, padding: 0,
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                  stroke={isTracked ? "#F5A623" : "#2e2e2e"}
+                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+              </button>
+            )}
 
             {/* countdown + map hint */}
             <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -584,7 +586,7 @@
               <div style={{ fontSize: "9px", color: "#2e2e2e", fontFamily: "'DM Mono', monospace", marginTop: "4px", letterSpacing: "0.5px" }}></div>
             </div>
           </div>
-          {showDenied && (
+          {!isIOS && showDenied && (
             <div style={{
               fontFamily: "'DM Sans', sans-serif", fontSize: "11px", color: "#ff5050",
               padding: "4px 16px 8px", marginBottom: "8px",
@@ -658,8 +660,11 @@
       );
     }
 
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
     /* ── triggerAlert ────────────────────────────────────────── */
     function triggerAlert(bus, mins) {
+      if (isIOS) return;
       const label = `${bus.line} → ${bus.destination}`;
       const body  = mins <= 0 ? "Arriving now" : `Arriving in ~${mins} min`;
       const tag   = `bus-alert-${bus.line}_${bus.aimedArrival || bus.expectedArrival || ""}`;
