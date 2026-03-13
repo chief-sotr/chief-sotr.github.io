@@ -70,7 +70,7 @@
     const { useState, useEffect, useCallback, useRef } = React;
 
     /* ── config ──────────────────────────────────────────────── */
-    const APP_VERSION = "1.8.1"; // Semver: bump PATCH for fixes, MINOR for features, MAJOR for breaking changes
+    const APP_VERSION = "1.9.0"; // Semver: bump PATCH for fixes, MINOR for features, MAJOR for breaking changes
     const API_KEY = "5100a3c4-9704-43e4-b6d2-5d8adb10a124";
     const PROXY   = "https://mta-proxy-sundayontheroof.chief-b4a.workers.dev/?url=";
 
@@ -515,6 +515,7 @@
             border: "1px solid rgba(255,255,255,0.08)",
             boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.72)",
             borderRadius: "18px",
+            touchAction: "none",
           }}>
             <div style={{
               display: "flex", alignItems: "center", gap: "14px",
@@ -596,7 +597,7 @@
         };
       });
     }
-    function BusRow({ bus, onOpenMap, onBellToggle, isTracked, showDenied }) {
+    function BusRow({ bus, onOpenMap, onBellToggle, isTracked, showDenied, isStuck }) {
       const color      = lineColor(bus.line);
       const isoTime    = bus.expectedArrival || bus.aimedArrival;
       const minutes    = isoTime ? minutesUntil(isoTime) : null;
@@ -648,9 +649,12 @@
                 textTransform: "uppercase", letterSpacing: "0.4px",
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
               }}>→ {bus.destination}</div>
-              {bus.presentableDistance && (
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "10px", color: "#444", marginTop: "2px" }}>
-                  {bus.presentableDistance}{bus.stopsAway != null && !bus.presentableDistance?.toLowerCase().includes("stop") ? ` · ${bus.stopsAway} stop${bus.stopsAway !== 1 ? "s" : ""} away` : ""}
+              {(bus.presentableDistance || isStuck) && (
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "10px", color: isStuck ? "#E05C5C" : "#444", marginTop: "2px" }}>
+                  {isStuck
+                    ? "stuck in traffic"
+                    : `${bus.presentableDistance}${bus.stopsAway != null && !bus.presentableDistance?.toLowerCase().includes("stop") ? ` · ${bus.stopsAway} stop${bus.stopsAway !== 1 ? "s" : ""} away` : ""}`
+                  }
                 </div>
               )}
             </div>
@@ -802,6 +806,7 @@
 
       const trackedAlertsRef = useRef(new Set());
       const firedAlerts      = useRef(new Set());
+      const stopHistory      = useRef({});
       const [deniedBusKey,   setDeniedBusKey] = useState(null);
 
       const displayId = (stopId || "").replace(/^MTA_/i, "");
@@ -885,6 +890,35 @@
 
           const freshBuses = [...realtime, ...unmatched];
           setBuses(freshBuses);
+
+          // Update stop history for stuck-in-traffic detection
+          realtime.forEach((bus) => {
+            if (!bus.aimedArrival || bus.stopsAway === null) return;
+            const key = `${bus.line}_${bus.aimedArrival}`;
+            const prev = stopHistory.current[key];
+            const delayMinutes = bus.expectedArrival && bus.aimedArrival
+              ? (new Date(bus.expectedArrival) - new Date(bus.aimedArrival)) / 60000
+              : 0;
+            if (!prev) {
+              stopHistory.current[key] = { stopsAway: bus.stopsAway, consecutiveUnchanged: 0, delayMinutes };
+              return;
+            }
+            const unchanged = bus.stopsAway >= prev.stopsAway;
+            stopHistory.current[key] = {
+              stopsAway: bus.stopsAway,
+              consecutiveUnchanged: unchanged ? prev.consecutiveUnchanged + 1 : 0,
+              delayMinutes,
+            };
+          });
+          // Purge stale keys
+          const now = Date.now();
+          Object.keys(stopHistory.current).forEach((k) => {
+            const aimed = k.split("_").slice(1).join("_");
+            if (aimed && (now - new Date(aimed).getTime()) > 5 * 60 * 1000) {
+              delete stopHistory.current[k];
+            }
+          });
+
           freshBuses.forEach((bus) => {
             const iso = bus.expectedArrival || bus.aimedArrival;
             if (!iso) return;
@@ -923,6 +957,12 @@
           const tB = new Date(b.expectedArrival || b.aimedArrival || 0).getTime();
           return tA - tB;
         });
+
+      const stuckSet = new Set(
+        Object.entries(stopHistory.current)
+          .filter(([_, v]) => v.consecutiveUnchanged >= 2 && v.delayMinutes > 3)
+          .map(([k]) => k)
+      );
 
       return (
         <div style={{ marginBottom: "28px", animation: "fadeIn 0.3s ease" }}>
@@ -999,6 +1039,7 @@
                     onBellToggle={handleBellToggle}
                     isTracked={(bus.aimedArrival || bus.expectedArrival) != null && trackedAlerts.has(`${bus.line}_${bus.aimedArrival || bus.expectedArrival}`)}
                     showDenied={deniedBusKey === `${bus.line}_${bus.aimedArrival || bus.expectedArrival}`}
+                    isStuck={stuckSet.has(`${bus.line}_${bus.aimedArrival}`)}
                   />
             ))
           )}
