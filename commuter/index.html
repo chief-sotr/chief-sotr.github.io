@@ -231,10 +231,10 @@
           const tappedTime = tappedBus.expectedArrival || tappedBus.aimedArrival;
           const thisTime   = b.expectedArrival || b.aimedArrival;
           const isTapped   = b.line === tappedBus.line && thisTime === tappedTime;
-          const pinLabel = isTapped ? "🚌" : b.line;
           const isoTime  = b.expectedArrival || b.aimedArrival;
           const mins     = isoTime ? minutesUntil(isoTime) : null;
           const timeLabel = mins === null || mins <= 0 ? "NOW" : mins + " min";
+          const pinLabel = isTapped ? "🚌" : timeLabel;
           const opacity  = isTapped ? "1" : "0.5";
           const pinSize  = isTapped ? "18px" : "11px";
           const html = '<div style="display:flex;align-items:center;justify-content:center;background:' + color + ';color:#0a0a0a;font-family:DM Mono,monospace;font-weight:700;font-size:' + pinSize + ';padding:5px 8px;border-radius:6px;box-shadow:0 3px 12px rgba(0,0,0,0.7);white-space:nowrap;position:relative;opacity:' + opacity + ';">' + pinLabel + '<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid ' + color + ';"><\/div><\/div>';
