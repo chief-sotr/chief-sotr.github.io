@@ -264,8 +264,7 @@
             const m = minutesUntil(iso);
             return m >= -1 && m <= 30;
           });
-          plotFleet(freshFleet, bus);
-          // Redraw active segment with updated bus position
+          // Identify refreshed version of tapped bus before plotting
           let freshBus = null;
           const tappedTime = bus.expectedArrival || bus.aimedArrival;
           // Prefer matching by schedule time when available
@@ -290,6 +289,8 @@
             freshBus = best;
           }
           if (!freshBus) freshBus = bus;
+          plotFleet(freshFleet, freshBus);
+          // Redraw active segment with updated bus position
           if (freshBus.vehicleLat != null && freshBus.vehicleLng != null) {
             drawActiveSegment(freshBus.vehicleLat, freshBus.vehicleLng);
           }
