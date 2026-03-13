@@ -12,18 +12,22 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #080808; }
+    body { background: #F7F6F2; }
     @keyframes pulse {
-      0%, 100% { background: rgba(255,255,255,0.04); }
-      50%       { background: rgba(255,255,255,0.09); }
+      0%, 100% { background: #EDECEA; }
+      50%       { background: #EDECEA; }
     }
-    @keyframes urgentYellow {
-      0%, 100% { background: rgba(245,200,35,0.08); }
-      50%       { background: rgba(245,200,35,0.22); }
+    @keyframes breathe-warn {
+      0%, 100% { background: rgba(229,150,10,0.07); }
+      50%       { background: rgba(229,150,10,0.15); }
     }
-    @keyframes urgentRed {
-      0%, 100% { background: rgba(255,60,60,0.10); }
-      50%       { background: rgba(255,60,60,0.28); }
+    @keyframes breathe-urg {
+      0%, 100% { background: rgba(208,52,31,0.07); }
+      50%       { background: rgba(208,52,31,0.16); }
+    }
+    @keyframes pulse-num {
+      0%, 100% { transform: scale(1); }
+      50%       { transform: scale(1.08); }
     }
     @keyframes blink {
       0%, 100% { opacity: 1; }
@@ -41,22 +45,22 @@
       from { transform: translateY(100%); }
       to   { transform: translateY(0); }
     }
-    input:focus { outline: none; border-color: #444 !important; }
+    input:focus { outline: none; border-color: #BBBBBB !important; }
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #222; border-radius: 2px; }
+    ::-webkit-scrollbar-thumb { background: #CCCCCC; border-radius: 2px; }
 
-    /* Leaflet overrides for dark theme */
-    .leaflet-container { background: #111 !important; font-family: 'DM Sans', sans-serif; }
+    /* Leaflet overrides */
+    .leaflet-container { background: #E8E8E8 !important; font-family: 'DM Sans', sans-serif; }
     .leaflet-control-zoom a {
-      background: #1a1a1a !important; color: #aaa !important;
-      border-color: #2a2a2a !important;
+      background: #FFFFFF !important; color: #666 !important;
+      border-color: #E4E3DE !important;
     }
-    .leaflet-control-zoom a:hover { background: #252525 !important; color: #fff !important; }
+    .leaflet-control-zoom a:hover { background: #F7F6F2 !important; color: #1A1A1A !important; }
     .leaflet-control-attribution {
-      background: rgba(0,0,0,0.6) !important; color: #333 !important; font-size: 9px;
+      background: rgba(255,255,255,0.85) !important; color: #999 !important; font-size: 9px;
     }
-    .leaflet-control-attribution a { color: #444 !important; }
+    .leaflet-control-attribution a { color: #AAAAAA !important; }
     .bus-pin-label { background: transparent; border: none; box-shadow: none; }
     /* Hide native zoom on touch devices — pinch-to-zoom is the natural gesture */
     @media (hover: none) and (pointer: coarse) {
@@ -70,7 +74,7 @@
     const { useState, useEffect, useCallback, useRef } = React;
 
     /* ── config ──────────────────────────────────────────────── */
-    const APP_VERSION = "1.9.0"; // Semver: bump PATCH for fixes, MINOR for features, MAJOR for breaking changes
+    const APP_VERSION = "2.0.0"; // Semver: bump PATCH for fixes, MINOR for features, MAJOR for breaking changes
     const API_KEY = "5100a3c4-9704-43e4-b6d2-5d8adb10a124";
     const PROXY   = "https://mta-proxy-sundayontheroof.chief-b4a.workers.dev/?url=";
 
@@ -237,11 +241,11 @@
           const pinLabel = isTapped ? "🚌" : timeLabel;
           const opacity  = isTapped ? "1" : "0.5";
           const pinSize  = isTapped ? "18px" : "11px";
-          const html = '<div style="display:flex;align-items:center;justify-content:center;background:' + color + ';color:#0a0a0a;font-family:DM Mono,monospace;font-weight:700;font-size:' + pinSize + ';padding:5px 8px;border-radius:6px;box-shadow:0 3px 12px rgba(0,0,0,0.7);white-space:nowrap;position:relative;opacity:' + opacity + ';">' + pinLabel + '<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid ' + color + ';"><\/div><\/div>';
+          const html = '<div style="display:flex;align-items:center;justify-content:center;background:#FFFFFF;color:#1A1A1A;font-family:DM Mono,monospace;font-weight:700;font-size:' + pinSize + ';padding:5px 8px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.15);border:1px solid #E4E3DE;white-space:nowrap;position:relative;opacity:' + opacity + ';">' + pinLabel + '<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid #FFFFFF;"><\/div><\/div>';
           const icon = L.divIcon({ className: "bus-pin-label", html, iconSize: [52, 32], iconAnchor: [26, 38] });
           const marker = L.marker([b.vehicleLat, b.vehicleLng], { icon })
             .addTo(map)
-            .bindPopup('<b style="font-family:DM Sans,sans-serif">' + b.line + ' \u2192 ' + b.destination + '<\/b><br><span style="font-family:DM Mono,monospace;font-size:12px;color:#F5A623">' + timeLabel + '<\/span>');
+            .bindPopup('<b style="font-family:DM Sans,sans-serif">' + b.line + ' \u2192 ' + b.destination + '<\/b><br><span style="font-family:DM Mono,monospace;font-size:12px;color:#B87200">' + timeLabel + '<\/span>');
           fleetMarkers.current.push(marker);
         });
       }, [color]);
@@ -322,9 +326,9 @@
         });
         leafletRef.current = map;
 
-        // CartoDB Dark Matter tiles
+        // CartoDB Voyager (light) tiles
         L.tileLayer(
-          "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+          "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
           {
             attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/">CARTO</a>',
             subdomains: "abcd",
@@ -335,7 +339,7 @@
         // User location pin
         const userIcon = L.divIcon({
           className: "bus-pin-label",
-          html: '<div style="width:16px;height:16px;border-radius:50%;background:#4A90D9;border:3px solid #fff;box-shadow:0 0 0 3px rgba(74,144,217,0.35),0 2px 8px rgba(0,0,0,0.6);"><\/div>',
+          html: '<div style="width:16px;height:16px;border-radius:50%;background:#4A90D9;border:3px solid #fff;box-shadow:0 0 0 3px rgba(74,144,217,0.35),0 2px 8px rgba(0,0,0,0.2);"><\/div>',
           iconSize: [16, 16],
           iconAnchor: [8, 8],
         });
@@ -459,7 +463,7 @@
       const isImminent = minutes === null || minutes <= 2;
       const isRedAlert    = minutes !== null && minutes < 5;
       const isYellowAlert = minutes !== null && minutes >= 5 && minutes <= 10;
-      const etaColor = isRedAlert ? "#ff3c3c" : isYellowAlert ? "#f5c823" : isImminent ? color : "#e8e8e8";
+      const etaColor = isRedAlert ? "#D0341F" : isYellowAlert ? "#C07800" : "#2A2A2A";
       const noGPS = (fleet || [bus]).filter(b => b.vehicleLat && b.vehicleLng).length === 0;
 
       return (
@@ -477,10 +481,10 @@
           }}>
             <button onClick={centerOnUser} title="Center on my location" style={{
               width: "44px", height: "44px",
-              background: "rgba(13,13,13,0.92)", border: "1px solid #2a2a2a",
+              background: "#FFFFFF", border: "1px solid #E4E3DE",
               borderRadius: "50%", cursor: "pointer",
               display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: "0 2px 12px rgba(0,0,0,0.6)",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
             }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4A90D9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="3"/>
@@ -492,12 +496,12 @@
             </button>
             <button onClick={refresh} title="Refresh bus locations" style={{
               width: "44px", height: "44px",
-              background: "rgba(13,13,13,0.92)", border: "1px solid #2a2a2a",
+              background: "#FFFFFF", border: "1px solid #E4E3DE",
               borderRadius: "50%", cursor: "pointer",
               display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: "0 2px 12px rgba(0,0,0,0.6)",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
             }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={refreshing ? "#555" : "#7EC8A0"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={refreshing ? "#CCCCCC" : "#7EC8A0"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
                 style={{ transform: refreshing ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.5s ease" }}>
                 <polyline points="23 4 23 10 17 10"/>
                 <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
@@ -511,10 +515,10 @@
             bottom: "calc(16px + env(safe-area-inset-bottom, 0px))",
             left: "16px", right: "16px",
             zIndex: 1001,
-            background: "#0f0f0f",
-            border: "2px solid rgba(255,255,255,0.10)",
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 3px 3px 0 #1a1a1a",
-            borderRadius: "12px",
+            background: "#FFFFFF",
+            border: "1px solid #E4E3DE",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+            borderRadius: "18px",
             touchAction: "none",
           }}>
             <div style={{
@@ -523,27 +527,26 @@
             }}>
               {/* Line badge */}
               <div style={{
-                background: color, color: "#0a0a0a",
                 fontFamily: "'DM Mono', monospace", fontWeight: 700,
-                fontSize: "14px", padding: "8px 12px", borderRadius: "5px",
+                fontSize: "10px", padding: "2px 8px", borderRadius: "3px",
                 flexShrink: 0, letterSpacing: "0.3px",
-                boxShadow: "1px 1px 0 rgba(0,0,0,0.5)", border: "1px solid rgba(0,0,0,0.3)",
+                color: "#B87200", border: "1px solid rgba(184,114,0,0.3)",
               }}>{bus.line}</div>
 
               {/* Destination + status */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
                   fontFamily: "'DM Sans', sans-serif", fontSize: "14px",
-                  color: "#ccc", textTransform: "uppercase", letterSpacing: "0.4px",
+                  color: "#1A1A1A", textTransform: "uppercase", letterSpacing: "0.4px",
                   whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                 }}>→ {bus.destination}</div>
                 <div style={{
                   fontFamily: "'DM Mono', monospace", fontSize: "10px",
-                  color: "#444", marginTop: "3px",
+                  color: "#999999", marginTop: "3px",
                 }}>
                   {bus.presentableDistance || ""}
                   {lastRefresh && (
-                    <span style={{ color: "#2e2e2e" }}>
+                    <span style={{ color: "#AAAAAA" }}>
                       {bus.presentableDistance ? " · " : ""}updated {lastRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                     </span>
                   )}
@@ -557,16 +560,15 @@
                   fontSize: "28px", lineHeight: 1, color: etaColor,
                 }}>{minutes !== null ? (minutes <= 0 ? "NOW" : minutes) : "NOW"}</div>
                 {minutes !== null && minutes > 0 && (
-                  <div style={{ fontSize: "10px", color: "#444", fontFamily: "'DM Sans', sans-serif", marginTop: "2px" }}>min</div>
+                  <div style={{ fontSize: "10px", color: "#BBBBBB", fontFamily: "'DM Mono', monospace", marginTop: "2px" }}>min</div>
                 )}
               </div>
 
               {/* Close */}
               <button onClick={onClose} style={{
                 flexShrink: 0, width: "44px", height: "44px",
-                background: "rgba(255,255,255,0.04)", border: "2px solid rgba(255,255,255,0.10)",
-                borderRadius: "50%", cursor: "pointer", color: "#555",
-                boxShadow: "1px 1px 0 #111",
+                background: "#F7F6F2", border: "1px solid #E4E3DE",
+                borderRadius: "50%", cursor: "pointer", color: "#999999",
                 fontSize: "20px", display: "flex", alignItems: "center",
                 justifyContent: "center", fontFamily: "'DM Mono', monospace",
               }}>×</button>
@@ -610,14 +612,10 @@
       const isYellowAlert = minutes !== null && minutes >= 5 && minutes <= 10;
 
       const bgStyle = isRedAlert
-        ? { animation: "urgentRed 0.8s ease-in-out infinite" }
+        ? { animation: "breathe-urg 2s ease-in-out infinite" }
         : isYellowAlert
-        ? { animation: "urgentYellow 1.2s ease-in-out infinite" }
-        : isImminent
-        ? { animation: "pulse 1.5s ease-in-out infinite" }
-        : { background: "rgba(255,255,255,0.025)", animation: "fadeIn 0.25s ease" };
-
-      const borderColor = isRedAlert ? "#ff3c3c" : isYellowAlert ? "#f5c823" : color;
+        ? { animation: "breathe-warn 2s ease-in-out infinite" }
+        : { background: "#EDECEA", animation: "fadeIn 0.25s ease" };
 
       return (
         <>
@@ -627,35 +625,34 @@
               display: "flex", alignItems: "center", gap: "14px",
               padding: "13px 16px",
               ...bgStyle,
-              borderLeft: `4px solid ${borderColor}`,
-              borderTop: "1px solid #222", borderRight: "1px solid #222", borderBottom: "1px solid #222",
-              borderRadius: "2px 6px 6px 2px",
-              boxShadow: "2px 2px 0 #111",
-              marginBottom: showDenied ? "0" : "8px",
+              border: "none",
+              borderRadius: "8px",
+              marginBottom: showDenied ? "0" : "6px",
               cursor: "pointer",
-              transition: "border-color 0.3s ease",
             }}
-            onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(1.15)"}
+            onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(0.97)"}
             onMouseLeave={(e) => e.currentTarget.style.filter = "brightness(1)"}
           >
             {/* line badge */}
-            <div style={{
-              background: color, color: "#0a0a0a",
-              fontFamily: "'DM Mono', monospace", fontWeight: 700,
-              fontSize: "12px", padding: "5px 9px", borderRadius: "4px",
-              minWidth: "42px", textAlign: "center", flexShrink: 0, letterSpacing: "0.3px",
-              boxShadow: "1px 1px 0 rgba(0,0,0,0.5)", border: "1px solid rgba(0,0,0,0.3)",
-            }}>{bus.line || "?"}</div>
-
-            {/* destination + distance */}
-            <div style={{ flex: 1, minWidth: 0 }}>
+            {/* route badge + headsign */}
+            <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", gap: "2px" }}>
               <div style={{
-                fontFamily: "'DM Sans', sans-serif", fontSize: "13px", color: "#999",
-                textTransform: "uppercase", letterSpacing: "0.4px",
+                fontFamily: "'DM Mono', monospace", fontWeight: 700,
+                fontSize: "10px", padding: "1px 6px", borderRadius: "3px",
+                color: "#B87200", border: "1px solid rgba(184,114,0,0.3)",
+                letterSpacing: "0.3px", display: "inline-block", alignSelf: "flex-start",
+              }}>{bus.line || "?"}</div>
+
+              <div style={{
+                fontFamily: "'DM Sans', sans-serif", fontSize: "12px", color: "#999999",
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-              }}>→ {bus.destination}</div>
+              }}>{bus.destination}</div>
+            </div>
+
+            {/* distance/status */}
+            <div style={{ flex: 1, minWidth: 0 }}>
               {(bus.presentableDistance || isStuck) && (
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "10px", color: isStuck ? "#E05C5C" : "#444", marginTop: "2px" }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "10px", color: isStuck ? "#D0341F" : "#AAAAAA", marginTop: "2px" }}>
                   {isStuck
                     ? "stuck in traffic"
                     : `${bus.presentableDistance}${bus.stopsAway != null && !bus.presentableDistance?.toLowerCase().includes("stop") ? ` · ${bus.stopsAway} stop${bus.stopsAway !== 1 ? "s" : ""} away` : ""}`
@@ -669,7 +666,7 @@
               <button
                 onClick={(e) => { e.stopPropagation(); onBellToggle && onBellToggle(bus, e); }}
                 style={{
-                  background: isTracked ? "rgba(245,166,35,0.12)" : "transparent",
+                  background: isTracked ? "rgba(184,114,0,0.10)" : "transparent",
                   border: "none", cursor: "pointer",
                   width: "32px", height: "32px",
                   display: "flex", alignItems: "center", justifyContent: "center",
@@ -677,7 +674,7 @@
                 }}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                  stroke={isTracked ? "#F5A623" : "#2e2e2e"}
+                  stroke={isTracked ? "#B87200" : "#CCCCCC"}
                   strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
                   <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
@@ -691,23 +688,25 @@
                 <>
                   <div style={{
                     fontFamily: "'DM Mono', monospace", fontWeight: 700,
-                    fontSize: "26px", lineHeight: 1,
-                    color: isRedAlert ? "#ff3c3c" : isYellowAlert ? "#f5c823" : isImminent ? color : "#e8e8e8",
+                    fontSize: "34px", lineHeight: 1,
+                    color: isRedAlert ? "#D0341F" : isYellowAlert ? "#C07800" : "#2A2A2A",
+                    animation: isRedAlert ? "pulse-num 2s ease-in-out infinite" : "none",
                   }}>{minutes <= 0 ? "NOW" : minutes}</div>
-                  {minutes > 0 && <div style={{ fontSize: "10px", color: "#444", fontFamily: "'DM Sans', sans-serif", marginTop: "2px" }}>min</div>}
+                  {minutes > 0 && <div style={{ fontSize: "10px", color: "#BBBBBB", fontFamily: "'DM Mono', monospace", marginTop: "2px", textAlign: "right", display: "block" }}>min</div>}
                 </>
               ) : (
                 <div style={{
                   fontFamily: "'DM Mono', monospace", fontWeight: 700,
-                  fontSize: "26px", lineHeight: 1, color,
+                  fontSize: "34px", lineHeight: 1, color: "#D0341F",
+                  animation: "pulse-num 2s ease-in-out infinite",
                 }}>NOW</div>
               )}
-              <div style={{ fontSize: "9px", color: "#2e2e2e", fontFamily: "'DM Mono', monospace", marginTop: "4px", letterSpacing: "0.5px" }}></div>
+              <div style={{ fontSize: "9px", color: "#CCCCCC", fontFamily: "'DM Mono', monospace", marginTop: "4px", letterSpacing: "0.5px" }}></div>
             </div>
           </div>
           {!isIOS && showDenied && (
             <div style={{
-              fontFamily: "'DM Sans', sans-serif", fontSize: "11px", color: "#ff5050",
+              fontFamily: "'DM Sans', sans-serif", fontSize: "11px", color: "#D0341F",
               padding: "4px 16px 8px", marginBottom: "8px",
             }}>Enable notifications in your browser settings</div>
           )}
@@ -725,41 +724,35 @@
         <div style={{
           display: "flex", alignItems: "center", gap: "14px",
           padding: "13px 16px",
-          background: "rgba(255,255,255,0.012)",
-          borderLeft: "4px solid #2a2a2a",
-          borderTop: "1px solid #1a1a1a", borderRight: "1px solid #1a1a1a", borderBottom: "1px solid #1a1a1a",
-          borderRadius: "2px 6px 6px 2px",
-          boxShadow: "2px 2px 0 #0c0c0c",
-          marginBottom: "8px",
-          opacity: 0.7,
+          background: "transparent",
+          border: "none",
+          borderRadius: "8px",
+          marginBottom: "6px",
         }}>
-          {/* muted line badge */}
-          <div style={{
-            background: "#1e1e1e", color: "#444",
-            fontFamily: "'DM Mono', monospace", fontWeight: 700,
-            fontSize: "12px", padding: "5px 9px", borderRadius: "4px",
-            minWidth: "42px", textAlign: "center", flexShrink: 0, letterSpacing: "0.3px",
-            border: "1px solid #2a2a2a",
-          }}>{bus.line || "?"}</div>
+          {/* route badge + headsign */}
+          <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", gap: "2px" }}>
+            <div style={{
+              fontFamily: "'DM Mono', monospace", fontWeight: 700,
+              fontSize: "10px", padding: "1px 6px", borderRadius: "3px",
+              color: "#AAAAAA", border: "1px solid rgba(170,170,170,0.3)",
+              letterSpacing: "0.3px", display: "inline-block", alignSelf: "flex-start",
+            }}>{bus.line || "?"}</div>
+            <div style={{
+              fontFamily: "'DM Sans', sans-serif", fontSize: "12px", color: "#BBBBBB",
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+            }}>{bus.destination}</div>
+          </div>
 
-          {/* destination + offline badge */}
+          {/* scheduled badge */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
-              fontFamily: "'DM Sans', sans-serif", fontSize: "13px", color: "#555",
-              textTransform: "uppercase", letterSpacing: "0.4px",
-              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-            }}>→ {bus.destination}</div>
-            <div style={{
               display: "inline-flex", alignItems: "center", gap: "4px",
-              marginTop: "4px",
-              background: "rgba(255,255,255,0.04)", border: "1px solid #2a2a2a",
-              borderRadius: "4px", padding: "2px 7px",
             }}>
-              {/* offline clock icon */}
-              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {/* clock icon */}
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#BBBBBB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
               </svg>
-              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "9px", color: "#444", letterSpacing: "1px", textTransform: "uppercase" }}>scheduled</span>
+              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "9px", color: "#BBBBBB", letterSpacing: "1px", textTransform: "uppercase" }}>scheduled</span>
             </div>
           </div>
 
@@ -769,12 +762,12 @@
               <>
                 <div style={{
                   fontFamily: "'DM Mono', monospace", fontWeight: 700,
-                  fontSize: "24px", lineHeight: 1, color: "#3a3a3a",
+                  fontSize: "34px", lineHeight: 1, color: "#AAAAAA",
                 }}>{minutes <= 0 ? "NOW" : minutes}</div>
-                {minutes > 0 && <div style={{ fontSize: "10px", color: "#333", fontFamily: "'DM Sans', sans-serif", marginTop: "2px" }}>min</div>}
+                {minutes > 0 && <div style={{ fontSize: "10px", color: "#BBBBBB", fontFamily: "'DM Mono', monospace", marginTop: "2px", textAlign: "right" }}>min</div>}
               </>
             ) : (
-              <div style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: "24px", lineHeight: 1, color: "#3a3a3a" }}>–</div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: "34px", lineHeight: 1, color: "#AAAAAA" }}>–</div>
             )}
           </div>
         </div>
@@ -991,8 +984,8 @@
                     if (e.key === "Escape") { e.preventDefault(); handleCancelEdit(); }
                   }}
                   style={{
-                    fontFamily: "'DM Sans', sans-serif", fontSize: "15px", fontWeight: 600, color: "#e8e8e8",
-                    background: "transparent", border: "none", borderBottom: "1px solid #F5A623", outline: "none",
+                    fontFamily: "'DM Sans', sans-serif", fontSize: "15px", fontWeight: 600, color: "#1A1A1A",
+                    background: "transparent", border: "none", borderBottom: "1px solid #B87200", outline: "none",
                     padding: "0 0 2px 0", width: "100%",
                   }}
                 />
@@ -1000,39 +993,39 @@
                 <div
                   style={{
                     display: "inline-flex", alignItems: "center", gap: "6px", cursor: "text",
-                    fontFamily: "'DM Sans', sans-serif", fontSize: "15px", fontWeight: 600, color: "#e8e8e8",
+                    fontFamily: "'DM Sans', sans-serif", fontSize: "15px", fontWeight: 600, color: "#1A1A1A",
                   }}
                   onClick={() => setIsEditing(true)}
                 >
                   <span style={{ minWidth: 0 }}>{primaryLabel}</span>
-                  {hoverHeader && <span style={{ fontFamily: "serif", fontSize: "12px", color: "#2e2e2e", flexShrink: 0 }}>✎</span>}
+                  {hoverHeader && <span style={{ fontFamily: "serif", fontSize: "12px", color: "#CCCCCC", flexShrink: 0 }}>✎</span>}
                 </div>
               )}
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#2e2e2e" }}>#{displayId}</div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#BBBBBB" }}>#{displayId}</div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
-              {loading && <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#333", animation: "blink 1s ease-in-out infinite" }} />}
+              {loading && <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#CCCCCC", animation: "blink 1s ease-in-out infinite" }} />}
               <button onClick={onRemove} title="Remove stop" style={{
                 background: "transparent", border: "none", cursor: "pointer",
-                color: "#2e2e2e", fontSize: "18px", lineHeight: 1,
+                color: "#CCCCCC", fontSize: "18px", lineHeight: 1,
                 padding: "2px 4px", fontFamily: "'DM Mono', monospace",
               }}>×</button>
             </div>
           </div>
 
-          <div style={{ height: "2px", background: "#2a2a2a", marginBottom: "12px" }} />
+          <div style={{ height: "1px", background: "#E4E3DE", marginBottom: "12px" }} />
 
           {fetchError ? (
             <div style={{
-              padding: "14px", background: "rgba(255,80,80,0.06)",
-              border: "2px solid rgba(255,80,80,0.20)", borderRadius: "6px",
-              fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#ff5050",
+              padding: "14px", background: "rgba(208,52,31,0.05)",
+              border: "1px solid rgba(208,52,31,0.15)", borderRadius: "8px",
+              fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#D0341F",
             }}>Error: {fetchError}</div>
           ) : visible.length === 0 ? (
             <div style={{
-              padding: "18px", background: "rgba(255,255,255,0.02)",
-              border: "2px dashed #2a2a2a", borderRadius: "6px",
-              textAlign: "center", color: "#2e2e2e",
+              padding: "18px", background: "transparent",
+              border: "1px dashed #D5D4CF", borderRadius: "8px",
+              textAlign: "center", color: "#AAAAAA",
               fontFamily: "'DM Mono', monospace", fontSize: "12px",
             }}>{loading ? "Loading…" : "No buses within 30 min"}</div>
           ) : (
@@ -1062,11 +1055,11 @@
           onClick={onClick}
           style={{
             width: "100%",
-            border: "2px dashed " + (hasStops ? "#2a2a2a" : "#3a3a3a"),
+            border: "1px dashed " + (hasStops ? "#D5D4CF" : "#CCCCCC"),
             borderRadius: "8px",
             padding: "18px",
             background: "transparent",
-            color: hasStops ? "#444" : "#666",
+            color: hasStops ? "#AAAAAA" : "#999999",
             fontFamily: "'DM Sans', sans-serif",
             fontSize: "14px", fontWeight: 600,
             cursor: "pointer",
@@ -1280,34 +1273,34 @@
       const cardContent = (
         <div
           style={{
-            background: "#0d0d0d",
-            border: "2px solid #2a2a2a",
-            borderRadius: "10px",
+            background: "#FFFFFF",
+            border: "1px solid #E4E3DE",
+            borderRadius: "14px",
             maxWidth: "480px",
             width: "100%",
             maxHeight: "calc(100vh - 96px)",
             overflow: "hidden",
             display: "flex",
             flexDirection: "column",
-            boxShadow: "4px 4px 0 #1a1a1a",
+            boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", borderBottom: "2px solid #2a2a2a" }}>
-            <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "16px", fontWeight: 700, color: "#e8e8e8" }}>Add Stop</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", borderBottom: "1px solid #E4E3DE" }}>
+            <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "16px", fontWeight: 700, color: "#1A1A1A" }}>Add Stop</div>
             <button onClick={close} style={{
-              background: "none", border: "none", color: "#555", fontSize: "22px", cursor: "pointer",
+              background: "none", border: "none", color: "#CCCCCC", fontSize: "22px", cursor: "pointer",
               padding: "0 4px", lineHeight: 1, fontFamily: "'DM Mono', monospace",
             }}>×</button>
           </div>
-          <div style={{ display: "flex", borderBottom: "2px solid #2a2a2a" }}>
+          <div style={{ display: "flex", borderBottom: "1px solid #E4E3DE" }}>
             <button
               type="button"
               onClick={() => setTab("enterId")}
               style={{
                 flex: 1, padding: "12px 16px", background: "none", border: "none",
-                borderBottom: tab === "enterId" ? "3px solid #F5A623" : "3px solid transparent",
-                color: tab === "enterId" ? "#e8e8e8" : "#444",
+                borderBottom: tab === "enterId" ? "2px solid #B87200" : "2px solid transparent",
+                color: tab === "enterId" ? "#1A1A1A" : "#AAAAAA",
                 fontFamily: "'DM Sans', sans-serif", fontSize: "13px", fontWeight: 600, cursor: "pointer",
               }}
             >
@@ -1318,8 +1311,8 @@
               onClick={onTabNearby}
               style={{
                 flex: 1, padding: "12px 16px", background: "none", border: "none",
-                borderBottom: tab === "nearby" ? "3px solid #F5A623" : "3px solid transparent",
-                color: tab === "nearby" ? "#e8e8e8" : "#444",
+                borderBottom: tab === "nearby" ? "2px solid #B87200" : "2px solid transparent",
+                color: tab === "nearby" ? "#1A1A1A" : "#AAAAAA",
                 fontFamily: "'DM Sans', sans-serif", fontSize: "13px", fontWeight: 600, cursor: "pointer",
               }}
             >
@@ -1337,8 +1330,8 @@
                   onChange={(e) => setId(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && submitEnterId()}
                   style={{
-                    width: "100%", background: "#0a0a0a", border: "2px solid #2a2a2a",
-                    borderRadius: "6px", padding: "12px 14px", color: "#e8e8e8",
+                    width: "100%", background: "#F7F6F2", border: "1px solid #E4E3DE",
+                    borderRadius: "8px", padding: "12px 14px", color: "#1A1A1A",
                     fontFamily: "'DM Mono', monospace", fontSize: "14px", marginBottom: "12px",
                   }}
                 />
@@ -1349,21 +1342,20 @@
                   onChange={(e) => setLabel(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && submitEnterId()}
                   style={{
-                    width: "100%", background: "#0a0a0a", border: "2px solid #2a2a2a",
-                    borderRadius: "6px", padding: "12px 14px", color: "#e8e8e8",
+                    width: "100%", background: "#F7F6F2", border: "1px solid #E4E3DE",
+                    borderRadius: "8px", padding: "12px 14px", color: "#1A1A1A",
                     fontFamily: "'DM Sans', sans-serif", fontSize: "14px", marginBottom: "12px",
                   }}
                 />
-                <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "11px", color: "#555", marginBottom: "16px", lineHeight: 1.5 }}>
+                <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "11px", color: "#AAAAAA", marginBottom: "16px", lineHeight: 1.5 }}>
                   Find stop IDs at{" "}
-                  <a href="https://bustime.mta.info" target="_blank" rel="noreferrer" style={{ color: "#666", textDecoration: "underline" }}>bustime.mta.info</a>
+                  <a href="https://bustime.mta.info" target="_blank" rel="noreferrer" style={{ color: "#999999", textDecoration: "underline" }}>bustime.mta.info</a>
                   {" "}→ click your stop → copy the ID from the URL.
                 </div>
                 <button onClick={submitEnterId} style={{
-                  width: "100%", padding: "12px 18px", background: "#F5A623", color: "#0a0a0a",
-                  border: "2px solid #c4851a", borderRadius: "6px", fontFamily: "'DM Sans', sans-serif",
+                  width: "100%", padding: "12px 18px", background: "#B87200", color: "#FFFFFF",
+                  border: "none", borderRadius: "8px", fontFamily: "'DM Sans', sans-serif",
                   fontWeight: 700, fontSize: "14px", cursor: "pointer",
-                  boxShadow: "2px 2px 0 rgba(0,0,0,0.4)",
                 }}>
                   Add Stop
                 </button>
@@ -1372,25 +1364,25 @@
             {tab === "nearby" && (
               <>
                 {nearbyLoadingPhase === "stops" && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "20px 0", color: "#999", fontFamily: "'DM Sans', sans-serif", fontSize: "14px" }}>
-                    <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#555", animation: "blink 1s ease-in-out infinite" }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "20px 0", color: "#999999", fontFamily: "'DM Sans', sans-serif", fontSize: "14px" }}>
+                    <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#CCCCCC", animation: "blink 1s ease-in-out infinite" }} />
                     Finding nearby stops…
                   </div>
                 )}
                 {nearbyLoadingPhase === "arrivals" && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "20px 0", color: "#999", fontFamily: "'DM Sans', sans-serif", fontSize: "14px" }}>
-                    <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#555", animation: "blink 1s ease-in-out infinite" }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "20px 0", color: "#999999", fontFamily: "'DM Sans', sans-serif", fontSize: "14px" }}>
+                    <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#CCCCCC", animation: "blink 1s ease-in-out infinite" }} />
                     Loading arrivals…
                   </div>
                 )}
                 {!nearbyLoadingPhase && nearbyError && (
                   <div style={{
-                    padding: "12px 14px", background: "rgba(255,80,80,0.08)", border: "1px solid rgba(255,80,80,0.2)",
-                    borderRadius: "8px", fontFamily: "'DM Sans', sans-serif", fontSize: "12px", color: "#ff9090", marginBottom: "12px",
+                    padding: "12px 14px", background: "rgba(208,52,31,0.05)", border: "1px solid rgba(208,52,31,0.15)",
+                    borderRadius: "8px", fontFamily: "'DM Sans', sans-serif", fontSize: "12px", color: "#D0341F", marginBottom: "12px",
                   }}>
                     {nearbyError}
                     {nearbyError.indexOf("connection") !== -1 && (
-                      <span>{" "}<button type="button" onClick={retryNearby} style={{ background: "none", border: "none", color: "#F5A623", textDecoration: "underline", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit", padding: 0 }}>Retry</button></span>
+                      <span>{" "}<button type="button" onClick={retryNearby} style={{ background: "none", border: "none", color: "#B87200", textDecoration: "underline", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit", padding: 0 }}>Retry</button></span>
                     )}
                   </div>
                 )}
@@ -1406,13 +1398,13 @@
                           }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                               <span style={{
-                                background: lineColor(group.line), color: "#0a0a0a",
-                                fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: "11px",
-                                padding: "4px 8px", borderRadius: "6px",
+                                fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: "10px",
+                                padding: "2px 8px", borderRadius: "3px",
+                                color: "#B87200", border: "1px solid rgba(184,114,0,0.3)",
                               }}>{group.line}</span>
-                              <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px", color: "#999" }}>→ {toTitleCase(group.headsign)}</span>
+                              <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px", color: "#999999" }}>→ {toTitleCase(group.headsign)}</span>
                             </div>
-                            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#444", marginLeft: "auto" }}>{formatDistanceNearby(nearestDist)}</span>
+                            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#AAAAAA", marginLeft: "auto" }}>{formatDistanceNearby(nearestDist)}</span>
                           </div>
                           {group.stops.map((stop) => {
                             const idClean = stop.idClean || (stop.id || "").replace(/^MTA_/i, "");
@@ -1428,22 +1420,21 @@
                                 style={{
                                   display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
                                   padding: "12px 14px", marginBottom: "6px",
-                                  borderLeft: "3px solid " + (selected ? "#F5A623" : "transparent"),
-                                  background: selected ? "rgba(245,166,35,0.06)" : "transparent",
-                                  borderRadius: "4px", cursor: "pointer",
-                                  border: "1px solid #1a1a1a",
+                                  background: selected ? "rgba(184,114,0,0.05)" : "transparent",
+                                  borderRadius: "8px", cursor: "pointer",
+                                  border: "1px solid " + (selected ? "rgba(184,114,0,0.2)" : "#E4E3DE"),
                                 }}
                               >
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "14px", color: "#e8e8e8", marginBottom: "2px" }}>{stop.name || "Stop " + idClean}</div>
-                                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#555" }}>{formatDistanceNearby(stop.distanceM)}</div>
+                                  <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "14px", color: "#1A1A1A", marginBottom: "2px" }}>{stop.name || "Stop " + idClean}</div>
+                                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#AAAAAA" }}>{formatDistanceNearby(stop.distanceM)}</div>
                                 </div>
                                 <div style={{
-                                  width: "20px", height: "20px", borderRadius: "4px", border: "2px solid " + (selected ? "#F5A623" : "#444"),
-                                  background: selected ? "#F5A623" : "transparent",
+                                  width: "20px", height: "20px", borderRadius: "4px", border: "2px solid " + (selected ? "#B87200" : "#CCCCCC"),
+                                  background: selected ? "#B87200" : "transparent",
                                   display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                                 }}>
-                                  {selected && <span style={{ color: "#0a0a0a", fontSize: "12px", fontWeight: 700 }}>✓</span>}
+                                  {selected && <span style={{ color: "#FFFFFF", fontSize: "12px", fontWeight: 700 }}>✓</span>}
                                 </div>
                               </div>
                             );
@@ -1454,7 +1445,7 @@
                   </div>
                 )}
                 {!nearbyLoadingPhase && !nearbyError && nearbyGroups.length === 0 && (
-                  <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "13px", color: "#555", padding: "16px 0" }}>
+                  <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "13px", color: "#AAAAAA", padding: "16px 0" }}>
                     No active stops found nearby — try entering a Stop ID manually
                   </div>
                 )}
@@ -1465,17 +1456,16 @@
             <div style={{
               position: "sticky", bottom: 0, left: 0, right: 0,
               display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
-              padding: "14px 18px", background: "#0d0d0d", borderTop: "2px solid #2a2a2a",
+              padding: "14px 18px", background: "#FFFFFF", borderTop: "1px solid #E4E3DE",
             }}>
-              <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "13px", color: "#999" }}>
+              <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "13px", color: "#999999" }}>
                 {selectedKeys.size} stop{selectedKeys.size !== 1 ? "s" : ""} selected
               </span>
               <button
                 onClick={addSelectedStops}
                 style={{
-                  padding: "10px 18px", background: "#F5A623", color: "#0a0a0a",
-                  border: "2px solid #c4851a", borderRadius: "6px", fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "14px", cursor: "pointer",
-                  boxShadow: "2px 2px 0 rgba(0,0,0,0.4)",
+                  padding: "10px 18px", background: "#B87200", color: "#FFFFFF",
+                  border: "none", borderRadius: "8px", fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: "14px", cursor: "pointer",
                 }}
               >
                 Add Stop(s)
@@ -1489,7 +1479,7 @@
         <div
           style={{
             position: "fixed", inset: 0, zIndex: 1000,
-            background: "rgba(0,0,0,0.92)",
+            background: "rgba(0,0,0,0.4)",
             display: "flex", alignItems: "flex-start", justifyContent: "center",
             padding: "0 20px",
             animation: "modalIn 0.2s ease",
@@ -1542,7 +1532,7 @@
 
       return (
         <div style={{
-          minHeight: "100vh", background: "#080808", color: "#e8e8e8",
+          minHeight: "100vh", background: "#F7F6F2", color: "#1A1A1A",
           fontFamily: "'DM Sans', sans-serif",
           maxWidth: "480px", margin: "0 auto", padding: "32px 20px 60px",
         }}>
@@ -1550,13 +1540,13 @@
           <div style={{ marginBottom: "32px" }}>
             <div style={{
               fontFamily: "'DM Mono', monospace", fontSize: "10px",
-              color: "#555", letterSpacing: "2.5px", textTransform: "uppercase", marginBottom: "6px",
+              color: "#AAAAAA", letterSpacing: "2.5px", textTransform: "uppercase", marginBottom: "6px",
             }}>NYC MTA</div>
             <div style={{
               fontFamily: "'DM Sans', sans-serif", fontSize: "28px", fontWeight: 700,
-              color: "#e8e8e8", letterSpacing: "-0.5px", lineHeight: 1,
+              color: "#1A1A1A", letterSpacing: "-0.5px", lineHeight: 1,
             }}>lowkey bus rider</div>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#555", marginTop: "6px" }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "11px", color: "#AAAAAA", marginTop: "6px" }}>
               beta · last updated {dataLastUpdated ? dataLastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—"} · next 30 min
             </div>
           </div>
@@ -1568,7 +1558,7 @@
           {stops.length === 0 ? (
             <div style={{
               padding: "32px 20px", textAlign: "center",
-              fontFamily: "'DM Mono', monospace", fontSize: "12px", color: "#222", lineHeight: 2,
+              fontFamily: "'DM Mono', monospace", fontSize: "12px", color: "#AAAAAA", lineHeight: 2,
             }}>
               No stops added yet.<br />Click &quot;+ Add Stop&quot; to get started.
             </div>
@@ -1591,9 +1581,9 @@
           )}
 
           <div style={{
-            borderTop: "1px solid #111", paddingTop: "20px", marginTop: "12px",
+            borderTop: "1px solid #E4E3DE", paddingTop: "20px", marginTop: "12px",
             fontFamily: "'DM Mono', monospace", fontSize: "10px",
-            color: "#555", textAlign: "center", letterSpacing: "1px",
+            color: "#AAAAAA", textAlign: "center", letterSpacing: "1px",
           }}>AUTO-REFRESHES EVERY 30 SECONDS · MTA BUSTIME API · v{APP_VERSION}</div>
 
           {/* Map modal */}
