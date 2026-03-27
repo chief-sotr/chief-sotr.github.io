@@ -667,7 +667,7 @@
       const isImminent = minutes === null || minutes <= 2;
       const isRedAlert    = minutes !== null && minutes < 5;
       const isYellowAlert = minutes !== null && minutes >= 5 && minutes <= 10;
-      const etaColor = isRedAlert ? "#C03A20" : isYellowAlert ? "#A86200" : "var(--text-primary)";
+      const etaColor = isRedAlert ? "#C03A20" : isYellowAlert ? "#F5A623" : "var(--text-primary)";
       const noGPS = (fleet || [bus]).filter(b => b.vehicleLat && b.vehicleLng).length === 0;
 
       return (
@@ -883,7 +883,7 @@
                   <div style={{
                     fontFamily: "'DM Mono', monospace", fontWeight: 700,
                     fontSize: "26px", lineHeight: 1,
-                    color: isRedAlert ? "#C03A20" : isYellowAlert ? "#A86200" : "var(--text-primary)",
+                    color: isRedAlert ? "#C03A20" : isYellowAlert ? "#F5A623" : "var(--text-primary)",
                     animation: isRedAlert ? "pulse-num 2s ease-in-out infinite" : "none",
                   }}>{minutes <= 0 ? "NOW" : minutes}</div>
                   {minutes > 0 && <div style={{ fontSize: "10px", color: "var(--text-muted)", fontFamily: "'DM Mono', monospace", marginTop: "2px" }}>min</div>}
