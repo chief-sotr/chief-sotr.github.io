@@ -1255,7 +1255,7 @@
             fontFamily: "'DM Sans', sans-serif",
             fontSize: "14px", fontWeight: 600,
             cursor: "pointer",
-            marginBottom: "32px",
+            marginTop: "12px",
           }}
         >
           + Add Stop
@@ -1800,8 +1800,6 @@
             </div>
           </div>
 
-          <AddStopTrigger onClick={() => setAddModalOpen(true)} hasStops={stops.length > 0} />
-
           {addModalOpen && <AddStopModal onAdd={addStop} onClose={() => setAddModalOpen(false)} theme={theme} />}
 
           {stops.length === 0 ? (
@@ -1829,6 +1827,8 @@
               />
             ))
           )}
+
+          <AddStopTrigger onClick={() => setAddModalOpen(true)} hasStops={stops.length > 0} />
 
           <div style={{
             borderTop: "1px solid var(--border-divider)", paddingTop: "20px", marginTop: "12px",
