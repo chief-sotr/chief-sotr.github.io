@@ -813,10 +813,10 @@
       const isYellowAlert = minutes !== null && minutes >= 5 && minutes <= 10;
 
       const bgStyle = isRedAlert
-        ? { animation: "breathe-urg 2s ease-in-out infinite" }
+        ? { animation: "breathe-urg 2s ease-in-out infinite", borderLeft: "3.5px solid #C03A20" }
         : isYellowAlert
-        ? { animation: "breathe-warn 2s ease-in-out infinite" }
-        : { background: "var(--bg-row)", animation: "fadeIn 0.25s ease" };
+        ? { animation: "breathe-warn 2s ease-in-out infinite", borderLeft: "3.5px solid #F5A623" }
+        : { background: "var(--bg-row)", animation: "fadeIn 0.25s ease", borderLeft: "3.5px solid transparent" };
 
       return (
         <>
