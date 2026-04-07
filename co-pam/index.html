@@ -36,6 +36,7 @@
         }
 
         .header {
+            position: relative;
             background: linear-gradient(135deg, rgba(138, 43, 226, 0.3) 0%, rgba(75, 0, 130, 0.3) 100%);
             padding: 20px;
             border-bottom: 1px solid rgba(200, 150, 255, 0.2);
@@ -52,6 +53,26 @@
         .header p {
             font-size: 12px;
             color: #a89acc;
+        }
+
+        .new-chat-btn {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 500;
+            background: rgba(138, 43, 226, 0.3);
+            color: #d4a5ff;
+            border: 1px solid rgba(200, 150, 255, 0.4);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .new-chat-btn:hover {
+            background: rgba(138, 43, 226, 0.5);
+            border-color: rgba(200, 150, 255, 0.7);
         }
 
         .chat-messages {
@@ -104,6 +125,57 @@
             border-left: 3px solid rgba(200, 150, 255, 0.5);
         }
 
+        .assistant .message-content p {
+            margin-bottom: 10px;
+        }
+
+        .assistant .message-content p:last-child {
+            margin-bottom: 0;
+        }
+
+        .assistant .message-content strong {
+            color: #e8c5ff;
+            font-weight: 600;
+        }
+
+        .assistant .message-content em {
+            color: #d4a5ff;
+            font-style: italic;
+        }
+
+        .assistant .message-content code {
+            background: rgba(20, 10, 35, 0.6);
+            color: #e8c5ff;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-family: 'Menlo', 'Monaco', monospace;
+            font-size: 13px;
+        }
+
+        .assistant .message-content h2,
+        .assistant .message-content h3 {
+            color: #d4a5ff;
+            margin: 12px 0 6px;
+            font-weight: 600;
+        }
+
+        .assistant .message-content h2 {
+            font-size: 16px;
+        }
+
+        .assistant .message-content h3 {
+            font-size: 14px;
+        }
+
+        .assistant .message-content ul,
+        .assistant .message-content ol {
+            margin: 8px 0 10px 20px;
+        }
+
+        .assistant .message-content li {
+            margin-bottom: 4px;
+        }
+
         .thinking {
             display: flex;
             align-items: center;
@@ -153,9 +225,11 @@
         .input-group {
             display: flex;
             gap: 10px;
+            align-items: flex-end;
         }
 
-        input {
+        input,
+        textarea {
             flex: 1;
             padding: 12px;
             border: 1px solid rgba(200, 150, 255, 0.3);
@@ -163,16 +237,31 @@
             background: rgba(40, 20, 60, 0.8);
             color: #e0e0e0;
             font-size: 14px;
+            font-family: inherit;
         }
 
-        input::placeholder {
+        textarea {
+            resize: none;
+            line-height: 1.5;
+            min-height: 46px;
+            max-height: 160px;
+            overflow-y: auto;
+        }
+
+        input::placeholder,
+        textarea::placeholder {
             color: #806c99;
         }
 
-        input:focus {
+        input:focus,
+        textarea:focus {
             outline: none;
             border-color: rgba(200, 150, 255, 0.6);
             background: rgba(50, 30, 70, 0.8);
+        }
+
+        #sendBtn {
+            flex-shrink: 0;
         }
 
         button {
@@ -220,6 +309,23 @@
             text-decoration: underline;
             cursor: pointer;
         }
+
+        #setupModal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #setupModal.open {
+            display: flex;
+        }
     </style>
 </head>
 <body>
@@ -227,38 +333,30 @@
         <div class="header">
             <h1>✨ Cosmic Guidance</h1>
             <p>Personal Astrology Consultation based inspired by Pam Gregory's Wisdom</p>
+            <button class="new-chat-btn" id="newChatBtn" onclick="newConsultation()">New consultation</button>
         </div>
 
-        <div class="chat-messages" id="chatMessages">
-            <div style="text-align: center; padding-top: 20px;">
-                <div style="font-size: 32px; margin-bottom: 10px;">🌙</div>
-                <p style="color: #d4a5ff; margin-bottom: 15px; font-weight: 500;">Welcome to your astrology consultation</p>
-                <p style="font-size: 13px; color: #806c99; line-height: 1.6;">
-                    I'm here to help you understand the cosmic patterns in your life and how to work with them for your highest growth and co-creation.<br><br>
-                    To begin, share your birth details (date, time, location) and what brought you here today.
-                </p>
-            </div>
-        </div>
+        <div class="chat-messages" id="chatMessages"></div>
 
         <div class="input-area">
-            <div class="setup-info">
-                <strong>⚙️ Setup required:</strong> This chatbot needs a valid Anthropic API key to function. 
+            <div class="setup-info" id="setupInfo">
+                <span id="setupInfoText"><strong>⚙️ Setup required:</strong> This chatbot needs a valid Anthropic API key to function.</span>
                 <a onclick="openSetupModal(); return false;">Click here to enter your API key</a>
             </div>
             <div class="input-group">
-                <input 
-                    type="text" 
-                    id="userInput" 
-                    placeholder="Share your birth details or what brought you here..." 
+                <textarea
+                    id="userInput"
+                    rows="2"
+                    placeholder="Share your birth details or what brought you here..."
                     disabled
-                />
+                ></textarea>
                 <button id="sendBtn" disabled>Send</button>
             </div>
         </div>
     </div>
 
     <!-- Setup Modal -->
-    <div id="setupModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; display: flex; align-items: center; justify-content: center;">
+    <div id="setupModal">
         <div style="background: rgba(20, 10, 35, 0.95); padding: 30px; border-radius: 12px; border: 1px solid rgba(200, 150, 255, 0.3); max-width: 400px; color: #e0e0e0;">
             <h2 style="color: #d4a5ff; margin-bottom: 15px;">API Configuration</h2>
             <p style="margin-bottom: 15px; font-size: 13px; color: #a89acc;">
@@ -424,11 +522,24 @@ Extraordinary collective transformation:
 Bring your whole self—your wisdom, warmth, and genuine care for their growth. ✨`;
 
         function openSetupModal() {
-            setupModal.style.display = 'flex';
+            apiKeyInput.value = apiKey || '';
+            setupModal.classList.add('open');
+            apiKeyInput.focus();
         }
 
         function closeSetupModal() {
-            setupModal.style.display = 'none';
+            setupModal.classList.remove('open');
+        }
+
+        function updateSetupBanner() {
+            const textSpan = document.getElementById('setupInfoText');
+            if (apiKey) {
+                textSpan.innerHTML = '<strong>✨ API key connected.</strong>';
+                document.querySelector('#setupInfo a').textContent = 'Change API key';
+            } else {
+                textSpan.innerHTML = '<strong>⚙️ Setup required:</strong> This chatbot needs a valid Anthropic API key to function.';
+                document.querySelector('#setupInfo a').textContent = 'Click here to enter your API key';
+            }
         }
 
         function saveApiKey() {
@@ -440,19 +551,89 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
             localStorage.setItem('anthropic_api_key', key);
             apiKey = key;
             closeSetupModal();
+            updateSetupBanner();
             userInput.disabled = false;
             sendBtn.disabled = false;
             userInput.focus();
         }
 
+        function renderWelcome() {
+            chatMessagesDiv.innerHTML = `
+                <div id="welcome" style="text-align: center; padding-top: 20px;">
+                    <div style="font-size: 32px; margin-bottom: 10px;">🌙</div>
+                    <p style="color: #d4a5ff; margin-bottom: 15px; font-weight: 500;">Welcome to your astrology consultation</p>
+                    <p style="font-size: 13px; color: #806c99; line-height: 1.6;">
+                        I'm here to help you understand the cosmic patterns in your life and how to work with them for your highest growth and co-creation.<br><br>
+                        To begin, share your birth details (date, time, location) and what brought you here today.
+                    </p>
+                </div>
+            `;
+        }
+
+        function newConsultation() {
+            conversationHistory = [];
+            renderWelcome();
+            if (!userInput.disabled) userInput.focus();
+        }
+
+        // Tiny markdown → HTML converter for assistant messages.
+        // Handles the subset Claude actually uses: headers, bold, italic,
+        // inline code, bullet/numbered lists, paragraphs, line breaks.
+        function renderMarkdown(text) {
+            // Escape HTML first to prevent injection.
+            let html = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+
+            // Split into blocks separated by blank lines.
+            const blocks = html.split(/\n{2,}/);
+            const rendered = blocks.map(block => {
+                const lines = block.split('\n');
+
+                // Headers (## or ###)
+                if (/^###\s+/.test(lines[0]) && lines.length === 1) {
+                    return `<h3>${lines[0].replace(/^###\s+/, '')}</h3>`;
+                }
+                if (/^##\s+/.test(lines[0]) && lines.length === 1) {
+                    return `<h2>${lines[0].replace(/^##\s+/, '')}</h2>`;
+                }
+
+                // Bulleted list (all lines start with - or *)
+                if (lines.every(l => /^\s*[-*]\s+/.test(l))) {
+                    const items = lines.map(l => `<li>${l.replace(/^\s*[-*]\s+/, '')}</li>`).join('');
+                    return `<ul>${items}</ul>`;
+                }
+
+                // Numbered list (all lines start with N. )
+                if (lines.every(l => /^\s*\d+\.\s+/.test(l))) {
+                    const items = lines.map(l => `<li>${l.replace(/^\s*\d+\.\s+/, '')}</li>`).join('');
+                    return `<ol>${items}</ol>`;
+                }
+
+                // Paragraph: join lines with <br>
+                return `<p>${lines.join('<br>')}</p>`;
+            }).join('');
+
+            // Inline replacements (applied after block structure is set).
+            return rendered
+                .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+                .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+                .replace(/`([^`\n]+)`/g, '<code>$1</code>');
+        }
+
         function addMessage(role, content) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${role}`;
-            
+
             const contentDiv = document.createElement('div');
             contentDiv.className = 'message-content';
-            contentDiv.textContent = content;
-            
+            if (role === 'assistant') {
+                contentDiv.innerHTML = renderMarkdown(content);
+            } else {
+                contentDiv.textContent = content;
+            }
+
             messageDiv.appendChild(contentDiv);
             chatMessagesDiv.appendChild(messageDiv);
             chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
@@ -483,7 +664,11 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
             const message = userInput.value.trim();
             if (!message || !apiKey) return;
 
+            // Clear the welcome block on first send.
+            document.getElementById('welcome')?.remove();
+
             userInput.value = '';
+            autoGrow();
             addMessage('user', message);
             conversationHistory.push({ role: 'user', content: message });
 
@@ -491,6 +676,7 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
             sendBtn.disabled = true;
             userInput.disabled = true;
 
+            let authFailure = false;
             try {
                 const response = await fetch('https://api.anthropic.com/v1/messages', {
                     method: 'POST',
@@ -502,13 +688,16 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
                     },
                     body: JSON.stringify({
                         model: 'claude-sonnet-4-6',
-                        max_tokens: 1024,
+                        max_tokens: 2048,
                         system: SYSTEM_PROMPT,
                         messages: conversationHistory
                     })
                 });
 
                 if (!response.ok) {
+                    if (response.status === 401 || response.status === 403) {
+                        authFailure = true;
+                    }
                     const error = await response.json();
                     throw new Error(error.error?.message || 'API request failed');
                 }
@@ -521,18 +710,43 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
                 addMessage('assistant', assistantMessage);
             } catch (error) {
                 removeThinking();
-                addMessage('assistant', `I apologize, but I encountered an issue: ${error.message}. Please check your API key and try again.`);
+                // Pop the user message back out of history so they can retry cleanly.
+                conversationHistory.pop();
+                if (authFailure) {
+                    addMessage('assistant', `Your API key was rejected (${error.message}). Please re-enter it to continue.`);
+                    localStorage.removeItem('anthropic_api_key');
+                    const badKey = apiKey;
+                    apiKey = null;
+                    updateSetupBanner();
+                    openSetupModal();
+                    apiKeyInput.value = badKey || '';
+                } else {
+                    addMessage('assistant', `I apologize, but I encountered an issue: ${error.message}. Please try again.`);
+                }
             } finally {
-                sendBtn.disabled = false;
-                userInput.disabled = false;
-                userInput.focus();
+                sendBtn.disabled = !apiKey;
+                userInput.disabled = !apiKey;
+                if (apiKey) userInput.focus();
             }
         }
 
+        function autoGrow() {
+            userInput.style.height = 'auto';
+            userInput.style.height = Math.min(userInput.scrollHeight, 160) + 'px';
+        }
+
         sendBtn.addEventListener('click', sendMessage);
-        userInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
+        userInput.addEventListener('input', autoGrow);
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
         });
+
+        // Initial render.
+        renderWelcome();
+        updateSetupBanner();
 
         // Check if API key exists on load
         if (apiKey) {
