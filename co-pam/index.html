@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Co-Pam - Cosmic Guidance</title>
+    <script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -388,6 +389,168 @@
         let conversationHistory = [];
         let apiKey = localStorage.getItem('anthropic_api_key');
 
+        // ============================================================
+        // LIVE COSMIC SNAPSHOT (powered by Astronomy Engine via CDN)
+        // ============================================================
+        // Computes geocentric ecliptic positions for the ten classical
+        // bodies plus lunar phase, retrogrades, and major aspects.
+        // The result is appended to SYSTEM_PROMPT on every request so
+        // the model can give grounded, real-time astrological context.
+        // If Astronomy Engine fails to load, the helpers return ''
+        // and the chatbot falls back to the static prompt only.
+
+        const SIGNS = [
+            'Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo',
+            'Libra', 'Scorpio', 'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces'
+        ];
+
+        // Bodies in display order. Strings (not Astronomy.Body refs) so
+        // this constant can be defined even if the CDN failed to load.
+        const BODY_NAMES = [
+            'Sun', 'Moon', 'Mercury', 'Venus', 'Mars',
+            'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'
+        ];
+
+        const ASPECTS = [
+            { name: 'conjunction', angle: 0,   glyph: '☌' },
+            { name: 'sextile',     angle: 60,  glyph: '⚹' },
+            { name: 'square',      angle: 90,  glyph: '□' },
+            { name: 'trine',       angle: 120, glyph: '△' },
+            { name: 'opposition',  angle: 180, glyph: '☍' }
+        ];
+        const ASPECT_ORB = 5; // degrees
+
+        function geoLongitude(bodyName, date) {
+            const body = Astronomy.Body[bodyName];
+            return Astronomy.Ecliptic(Astronomy.GeoVector(body, date, true)).elon;
+        }
+
+        function longitudeToSign(lon) {
+            const wrapped = ((lon % 360) + 360) % 360;
+            const signIndex = Math.floor(wrapped / 30);
+            const inSign = wrapped - signIndex * 30;
+            const deg = Math.floor(inSign);
+            const min = Math.floor((inSign - deg) * 60);
+            return { sign: SIGNS[signIndex], degree: deg, minute: min };
+        }
+
+        function formatSign(lon) {
+            const s = longitudeToSign(lon);
+            const min = String(s.minute).padStart(2, '0');
+            return `${s.degree}°${min}′ ${s.sign}`;
+        }
+
+        function isRetrograde(bodyName, date) {
+            // Sun and Moon are never retrograde from Earth's perspective.
+            if (bodyName === 'Sun' || bodyName === 'Moon') return false;
+            const yesterday = new Date(date.getTime() - 86400000);
+            const lonNow = geoLongitude(bodyName, date);
+            const lonThen = geoLongitude(bodyName, yesterday);
+            let diff = lonNow - lonThen;
+            // Wrap into [-180, 180] so we don't misread a 0/360 crossing.
+            if (diff > 180) diff -= 360;
+            if (diff < -180) diff += 360;
+            return diff < 0;
+        }
+
+        function moonPhaseLabel(phaseLon) {
+            // phaseLon is the Sun→Moon longitude difference, 0-360.
+            if (phaseLon < 22.5)  return 'New Moon';
+            if (phaseLon < 67.5)  return 'Waxing Crescent';
+            if (phaseLon < 112.5) return 'First Quarter';
+            if (phaseLon < 157.5) return 'Waxing Gibbous';
+            if (phaseLon < 202.5) return 'Full Moon';
+            if (phaseLon < 247.5) return 'Waning Gibbous';
+            if (phaseLon < 292.5) return 'Last Quarter';
+            if (phaseLon < 337.5) return 'Waning Crescent';
+            return 'New Moon';
+        }
+
+        function angularSeparation(lon1, lon2) {
+            let d = ((lon1 - lon2) % 360 + 360) % 360;
+            return Math.min(d, 360 - d); // [0, 180]
+        }
+
+        function detectAspects(positions, date) {
+            const found = [];
+            const later = new Date(date.getTime() + 6 * 3600 * 1000);
+            const laterLons = {};
+            positions.forEach(p => { laterLons[p.name] = geoLongitude(p.name, later); });
+
+            for (let i = 0; i < positions.length; i++) {
+                for (let j = i + 1; j < positions.length; j++) {
+                    const a = positions[i];
+                    const b = positions[j];
+                    const sepNow = angularSeparation(a.lon, b.lon);
+                    const sepLater = angularSeparation(laterLons[a.name], laterLons[b.name]);
+                    for (const asp of ASPECTS) {
+                        const orb = Math.abs(sepNow - asp.angle);
+                        if (orb <= ASPECT_ORB) {
+                            const orbLater = Math.abs(sepLater - asp.angle);
+                            const motion = orbLater < orb ? 'applying' : 'separating';
+                            found.push({
+                                a: a.name,
+                                b: b.name,
+                                aspect: asp.name,
+                                glyph: asp.glyph,
+                                orb: orb,
+                                motion: motion
+                            });
+                            break; // one aspect per pair
+                        }
+                    }
+                }
+            }
+            // Tightest aspects first.
+            found.sort((x, y) => x.orb - y.orb);
+            return found;
+        }
+
+        function computeCosmicSnapshot(date = new Date()) {
+            if (typeof Astronomy === 'undefined') return '';
+            try {
+                const positions = BODY_NAMES.map(name => ({
+                    name,
+                    lon: geoLongitude(name, date),
+                    retrograde: isRetrograde(name, date)
+                }));
+
+                const phaseLon = Astronomy.MoonPhase(date);
+                const phaseName = moonPhaseLabel(phaseLon);
+                const illumination = Astronomy.Illumination(Astronomy.Body.Moon, date).phase_fraction;
+                const illumPct = Math.round(illumination * 100);
+
+                const aspects = detectAspects(positions, date);
+
+                const lines = [];
+                lines.push(`## TODAY'S SKY (live, computed ${date.toISOString().slice(0, 16).replace('T', ' ')} UTC)`);
+                lines.push('');
+                positions.forEach(p => {
+                    let line = `**${p.name}**: ${formatSign(p.lon)}`;
+                    if (p.name === 'Moon') {
+                        line += ` (${phaseName}, ${illumPct}% illuminated)`;
+                    } else if (p.name !== 'Sun') {
+                        line += p.retrograde ? ' (retrograde)' : ' (direct)';
+                    }
+                    lines.push(line);
+                });
+
+                if (aspects.length > 0) {
+                    lines.push('');
+                    lines.push(`### Active Major Aspects (within ${ASPECT_ORB}° orb)`);
+                    aspects.forEach(asp => {
+                        const orbStr = asp.orb.toFixed(1);
+                        lines.push(`- ${asp.a} ${asp.glyph} ${asp.b} (${asp.aspect}, ${orbStr}° orb, ${asp.motion})`);
+                    });
+                }
+
+                return lines.join('\n');
+            } catch (e) {
+                console.warn('Cosmic snapshot failed:', e);
+                return '';
+            }
+        }
+
         // ENHANCED SYSTEM PROMPT WITH PAM GREGORY'S ACTUAL TEACHINGS
         const SYSTEM_PROMPT = `You are an astrology consultant channeling the wisdom and compassionate approach of Pam Gregory, the renowned UK astrologer with 45+ years of professional expertise. You embody her philosophy, voice, and actual teachings about astrology, consciousness, and human transformation.
 
@@ -454,6 +617,8 @@ Extraordinary collective transformation:
 - Major themes: massive awakenings, disclosure, old paradigm crumbling, new earth foundations
 - Photonic energy & cosmic upgrades: fatigue, insomnia, ringing ears = body assimilating upgrades
 - Everyone's timeline is different—step into new reality at your own pace
+
+**Live planetary positions for the current moment are appended at the end of this prompt under "TODAY'S SKY". When the user asks about the current sky, today's transits, what sign the Moon/Sun/any planet is in, retrogrades, or active aspects, reference that live block as the source of truth — trust it over any general training-data knowledge about 2025-2027.**
 
 ## HOW TO CONSULT
 
@@ -678,6 +843,14 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
 
             let authFailure = false;
             try {
+                // Augment the system prompt with a fresh live planetary snapshot.
+                // computeCosmicSnapshot() returns '' if Astronomy Engine failed
+                // to load — in which case we fall back to the static prompt.
+                const cosmicSnapshot = computeCosmicSnapshot();
+                const augmentedSystem = cosmicSnapshot
+                    ? SYSTEM_PROMPT + '\n\n---\n\n' + cosmicSnapshot
+                    : SYSTEM_PROMPT;
+
                 const response = await fetch('https://api.anthropic.com/v1/messages', {
                     method: 'POST',
                     headers: {
@@ -689,7 +862,7 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
                     body: JSON.stringify({
                         model: 'claude-sonnet-4-6',
                         max_tokens: 2048,
-                        system: SYSTEM_PROMPT,
+                        system: augmentedSystem,
                         messages: conversationHistory
                     })
                 });
