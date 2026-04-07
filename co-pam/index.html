@@ -237,7 +237,7 @@
             border-radius: 6px;
             background: rgba(40, 20, 60, 0.8);
             color: #e0e0e0;
-            font-size: 14px;
+            font-size: 16px;
             font-family: inherit;
         }
 
@@ -327,13 +327,48 @@
         #setupModal.open {
             display: flex;
         }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 8px;
+                align-items: stretch;
+            }
+
+            .container {
+                height: 100dvh;
+                max-height: none;
+            }
+
+            .header {
+                padding: 16px 16px 14px;
+            }
+
+            .header h1 {
+                font-size: 20px;
+            }
+
+            .new-chat-btn {
+                position: static;
+                display: block;
+                margin: 12px auto 0;
+                width: fit-content;
+            }
+
+            .chat-messages {
+                padding: 16px;
+            }
+
+            .input-area {
+                padding: 12px;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>✨ Cosmic Guidance</h1>
-            <p>Personal Astrology Consultation based inspired by Pam Gregory's Wisdom</p>
+            <p>Personal Astrology Consultation inspired by Pam Gregory's Wisdom</p>
             <button class="new-chat-btn" id="newChatBtn" onclick="newConsultation()">New consultation</button>
         </div>
 
