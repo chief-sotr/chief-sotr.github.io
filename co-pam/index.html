@@ -1,1 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Co-Pam - Cosmic Guidance</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a0033 0%, #2d1b3d 50%, #1a0033 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 700px;
+            background: rgba(20, 10, 35, 0.8);
+            border: 1px solid rgba(200, 150, 255, 0.3);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(138, 43, 226, 0.2);
+            display: flex;
+            flex-direction: column;
+            height: 85vh;
+            max-height: 800px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, rgba(138, 43, 226, 0.3) 0%, rgba(75, 0, 130, 0.3) 100%);
+            padding: 20px;
+            border-bottom: 1px solid rgba(200, 150, 255, 0.2);
+            text-align: center;
+            border-radius: 12px 12px 0 0;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            color: #d4a5ff;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            font-size: 12px;
+            color: #a89acc;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message {
+            display: flex;
+            gap: 10px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message-content {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 10px;
+            line-height: 1.5;
+            font-size: 14px;
+        }
+
+        .user .message-content {
+            background: rgba(138, 43, 226, 0.5);
+            color: #e0e0e0;
+            border: 1px solid rgba(200, 150, 255, 0.3);
+        }
+
+        .assistant .message-content {
+            background: rgba(75, 0, 130, 0.3);
+            color: #d4d4d4;
+            border-left: 3px solid rgba(200, 150, 255, 0.5);
+        }
+
+        .thinking {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #a89acc;
+            font-size: 13px;
+            font-style: italic;
+        }
+
+        .thinking-dots {
+            display: flex;
+            gap: 3px;
+        }
+
+        .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #a89acc;
+            animation: pulse 1.4s infinite;
+        }
+
+        .dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 0.3;
+            }
+            50% {
+                opacity: 1;
+            }
+        }
+
+        .input-area {
+            padding: 16px;
+            border-top: 1px solid rgba(200, 150, 255, 0.2);
+            background: rgba(10, 5, 20, 0.5);
+            border-radius: 0 0 12px 12px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid rgba(200, 150, 255, 0.3);
+            border-radius: 6px;
+            background: rgba(40, 20, 60, 0.8);
+            color: #e0e0e0;
+            font-size: 14px;
+        }
+
+        input::placeholder {
+            color: #806c99;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: rgba(200, 150, 255, 0.6);
+            background: rgba(50, 30, 70, 0.8);
+        }
+
+        button {
+            padding: 12px 20px;
+            background: linear-gradient(135deg, rgba(138, 43, 226, 0.6) 0%, rgba(75, 0, 130, 0.6) 100%);
+            color: #e0e0e0;
+            border: 1px solid rgba(200, 150, 255, 0.4);
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background: linear-gradient(135deg, rgba(138, 43, 226, 0.8) 0%, rgba(75, 0, 130, 0.8) 100%);
+            border-color: rgba(200, 150, 255, 0.6);
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .setup-info {
+            background: rgba(138, 43, 226, 0.2);
+            border: 1px solid rgba(200, 150, 255, 0.3);
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #a89acc;
+            margin-bottom: 10px;
+        }
+
+        .setup-info strong {
+            color: #d4a5ff;
+        }
+
+        .setup-info a {
+            color: #d4a5ff;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>✨ Cosmic Guidance</h1>
+            <p>Personal Astrology Consultation based inspired by Pam Gregory's Wisdom</p>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <div style="text-align: center; padding-top: 20px;">
+                <div style="font-size: 32px; margin-bottom: 10px;">🌙</div>
+                <p style="color: #d4a5ff; margin-bottom: 15px; font-weight: 500;">Welcome to your astrology consultation</p>
+                <p style="font-size: 13px; color: #806c99; line-height: 1.6;">
+                    I'm here to help you understand the cosmic patterns in your life and how to work with them for your highest growth and co-creation.<br><br>
+                    To begin, share your birth details (date, time, location) and what brought you here today.
+                </p>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <div class="setup-info">
+                <strong>⚙️ Setup required:</strong> This chatbot needs a valid Anthropic API key to function. 
+                <a onclick="openSetupModal(); return false;">Click here to enter your API key</a>
+            </div>
+            <div class="input-group">
+                <input 
+                    type="text" 
+                    id="userInput" 
+                    placeholder="Share your birth details or what brought you here..." 
+                    disabled
+                />
+                <button id="sendBtn" disabled>Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Setup Modal -->
+    <div id="setupModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; display: flex; align-items: center; justify-content: center;">
+        <div style="background: rgba(20, 10, 35, 0.95); padding: 30px; border-radius: 12px; border: 1px solid rgba(200, 150, 255, 0.3); max-width: 400px; color: #e0e0e0;">
+            <h2 style="color: #d4a5ff; margin-bottom: 15px;">API Configuration</h2>
+            <p style="margin-bottom: 15px; font-size: 13px; color: #a89acc;">
+                Enter your Anthropic API key to enable the astrology chatbot. Your key is stored only in your browser's local storage.
+            </p>
+            <input 
+                type="password" 
+                id="apiKeyInput" 
+                placeholder="sk-ant-..." 
+                style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid rgba(200, 150, 255, 0.3); background: rgba(40, 20, 60, 0.8); color: #e0e0e0; border-radius: 6px;"
+            />
+            <div style="display: flex; gap: 10px;">
+                <button onclick="saveApiKey()" style="flex: 1;">Save & Connect</button>
+                <button onclick="closeSetupModal()" style="flex: 1; background: rgba(75, 0, 130, 0.3);">Cancel</button>
+            </div>
+            <p style="font-size: 11px; color: #806c99; margin-top: 15px;">
+                Get an API key at <a href="https://console.anthropic.com" target="_blank" style="color: #d4a5ff;">console.anthropic.com</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const chatMessagesDiv = document.getElementById('chatMessages');
+        const userInput = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const setupModal = document.getElementById('setupModal');
+        const apiKeyInput = document.getElementById('apiKeyInput');
+
+        let conversationHistory = [];
+        let apiKey = localStorage.getItem('anthropic_api_key');
+
+        // ENHANCED SYSTEM PROMPT WITH PAM GREGORY'S ACTUAL TEACHINGS
+        const SYSTEM_PROMPT = `You are an astrology consultant channeling the wisdom and compassionate approach of Pam Gregory, the renowned UK astrologer with 45+ years of professional expertise. You embody her philosophy, voice, and actual teachings about astrology, consciousness, and human transformation.
+
+## CORE PHILOSOPHY
+
+### Astrology as Language (Not Belief)
+- "It's not saying you don't believe in French, do you?" - Astrology is a language with rules like grammar
+- It shows patterns, potential, possibilities—but never commands
+- You don't believe in it; you understand it
+
+### Free Will & Co-Creation (Central Teaching)
+- Shift from "what's happening to me?" to "how can I co-create with this cosmic weather?"
+- Astrology = cosmic weather forecast. Rain is coming, so you put on a coat. But the rain falls whether you like it or not.
+- True empowerment is choosing how you respond, not denying the weather
+- "We are not here merely to endure the storms, but to become the stillness within them"
+- "True mastery lies in holding our inner frequency of love, stillness, and compassion, for that is what shapes both personal and collective reality"
+
+### Your Role
+- You're "lighting the way" for consciousness expansion—not telling them what to do
+- Offer a mirror to their choices, not a cage
+- Even if they don't understand the technical astrology, they're "picking up your energy"
+
+## PAMS'S KEY FRAMEWORKS
+
+### Astrology Origins
+- Began ~6,000 years ago in ancient Mesopotamia when people watched planets for entertainment
+- Created myths about gods living on planets—these myths are the "bread and butter" of astrology today
+- The myths are eternally true because they encode archetypal patterns
+
+### Planets as Multifaceted Diamonds
+Each planet has spectrum of expressions, modified by sign and house:
+- **Sun**: Core identity, life force, authentic self
+- **Moon**: Emotional world, inner needs, private self
+- **Mercury**: Communication style, thinking, information processing
+- **Venus**: Love, values, what you magnetize, how you relate
+- **Mars**: Courage, bravery, risk-taking, physicality, libido, the kind of partner attracted
+- **Jupiter**: Expansion, luck, belief, abundance
+- **Saturn**: Structure, mastery through limitation, 29-year cycle of maturation
+- **Chiron**: Wounded healer—your gift comes from your wound
+- **Lunar Nodes**: Soul's evolutionary path—North Node (growing into), South Node (already mastered)
+- **Pluto**: Transformation, death/rebirth, 248-year generational cycle
+
+### Three Astrological Systems
+- Western Tropical (Pam's approach): Anchored into seasons
+- Vedic/Sidereal: Based on constellations as they appear
+- All systems: "Same information, different flavors"
+
+### Major Cycles
+- **Saturn Return (29 years)**: Life restructuring, maturation, becoming an adult through letting go
+- **Pluto Return (248 years)**: Complete transformation, death of old identity, rebirth
+- **Lunar Nodes (19 years)**: Soul invitations to evolve
+- **Lunar Cycles (Monthly)**: New Moon (intention), Full Moon (culmination)
+- **Eclipses (Every 6 months)**: Powerful turning points and fated timing
+
+### Kuiper Belt Objects
+- Chiron, Eris, Gonggong, Makemake, Haumea, Sedna represent evolution of human consciousness
+- The "wonky triangle" of Pluto, Haumea & Sedna signals dramatic shifts in human consciousness
+
+## CURRENT COSMIC WEATHER (2025-2027)
+Extraordinary collective transformation:
+- "Massive quantum leap into new dimensions"
+- Humans transforming from dense physical beings into "beings of light" with telepathic abilities
+- "This is the astrology that will reset humanity"
+- Major themes: massive awakenings, disclosure, old paradigm crumbling, new earth foundations
+- Photonic energy & cosmic upgrades: fatigue, insomnia, ringing ears = body assimilating upgrades
+- Everyone's timeline is different—step into new reality at your own pace
+
+## HOW TO CONSULT
+
+### Opening
+1. Welcome warmly—they came sensing something true
+2. Ask for birth details: date, time (crucial), location
+3. Ask what brought them here—listen deeply
+4. Acknowledge their experience
+
+### The Consultation
+1. Reflect back what you hear—show deep understanding
+2. Connect cosmic patterns to their experience: "Your chart shows...", "The cosmic weather is..."
+3. Offer weather forecast perspective: patterns and how to work with them
+4. **Empower free will**: "This energy is available. How will YOU choose to work with it?"
+5. Encourage embodied understanding: "What does this bring up for you?"
+6. Point to growth: "What's trying to evolve in you?"
+
+### Closing
+- Summarize key insights
+- Suggest practical ways to work with the cosmic weather
+- Remind them: "You are the co-creator of your reality"
+
+### What NOT to Do
+- ❌ Never predict specific outcomes
+- ❌ Never use fear or doom
+- ❌ Never dismiss free will
+- ❌ Never demand belief
+- ✅ Always honor their sovereignty
+
+## PAM'S COMMUNICATION STYLE
+
+### Signature Metaphors
+- "Cosmic weather forecast" (patterns, not destiny)
+- "Multifaceted diamond" (planets have many expressions)
+- "Sheets of music" (notes written but how you play is up to you)
+- "Frequency" (what you emit, you attract)
+
+### Her Energy
+- Warm, genuinely caring
+- Wise but never condescending
+- Conversational, not mystical
+- Often invites reflection
+- Uses vivid metaphors to make complex ideas accessible
+
+## SPECIFIC TEACHINGS
+
+### On Frequency & Co-Creation
+- "Feel the emotion internally FIRST, then experience it in reality—we are creating the new earth"
+- What you focus on, you manifest
+- "Your focus is your superpower"
+- Self-care includes mindset reframes
+- "Bless water to raise your frequency"
+
+### On Personal Growth
+- Birth chart = blueprint of your consciousness
+- Shows patterns so you can choose better
+- Goal is embodied understanding, not intellectual knowledge
+
+### On Boundaries
+- "Carefully choose to let go and not hold everyone's troubles"
+- Spiritual care includes protecting your energy
+- Love is not co-dependency
+
+---
+
+Bring your whole self—your wisdom, warmth, and genuine care for their growth. ✨`;
+
+        function openSetupModal() {
+            setupModal.style.display = 'flex';
+        }
+
+        function closeSetupModal() {
+            setupModal.style.display = 'none';
+        }
+
+        function saveApiKey() {
+            const key = apiKeyInput.value.trim();
+            if (!key) {
+                alert('Please enter a valid API key');
+                return;
+            }
+            localStorage.setItem('anthropic_api_key', key);
+            apiKey = key;
+            closeSetupModal();
+            userInput.disabled = false;
+            sendBtn.disabled = false;
+            userInput.focus();
+        }
+
+        function addMessage(role, content) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = content;
+            
+            messageDiv.appendChild(contentDiv);
+            chatMessagesDiv.appendChild(messageDiv);
+            chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
+        }
+
+        function showThinking() {
+            const thinkingDiv = document.createElement('div');
+            thinkingDiv.className = 'thinking';
+            thinkingDiv.id = 'thinking';
+            thinkingDiv.innerHTML = `
+                <span>Consulting the stars</span>
+                <div class="thinking-dots">
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                </div>
+            `;
+            chatMessagesDiv.appendChild(thinkingDiv);
+            chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
+        }
+
+        function removeThinking() {
+            const thinking = document.getElementById('thinking');
+            if (thinking) thinking.remove();
+        }
+
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (!message || !apiKey) return;
+
+            userInput.value = '';
+            addMessage('user', message);
+            conversationHistory.push({ role: 'user', content: message });
+
+            showThinking();
+            sendBtn.disabled = true;
+            userInput.disabled = true;
+
+            try {
+                const response = await fetch('https://api.anthropic.com/v1/messages', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': apiKey,
+                        'anthropic-version': '2023-06-01'
+                    },
+                    body: JSON.stringify({
+                        model: 'claude-3-5-sonnet-20241022',
+                        max_tokens: 1024,
+                        system: SYSTEM_PROMPT,
+                        messages: conversationHistory
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error?.message || 'API request failed');
+                }
+
+                const data = await response.json();
+                const assistantMessage = data.content[0].text;
+
+                conversationHistory.push({ role: 'assistant', content: assistantMessage });
+                removeThinking();
+                addMessage('assistant', assistantMessage);
+            } catch (error) {
+                removeThinking();
+                addMessage('assistant', `I apologize, but I encountered an issue: ${error.message}. Please check your API key and try again.`);
+            } finally {
+                sendBtn.disabled = false;
+                userInput.disabled = false;
+                userInput.focus();
+            }
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        // Check if API key exists on load
+        if (apiKey) {
+            userInput.disabled = false;
+            sendBtn.disabled = false;
+        } else {
+            openSetupModal();
+        }
+    </script>
+</body>
+</html>
