@@ -571,14 +571,22 @@
         const ASPECT_ORB = 5; // degrees
 
         function geoLongitude(bodyName, date) {
-            // Geocentric ecliptic longitude of date (apparent, mean ecliptic
-            // of date). This matches Swiss Ephemeris / astro.com conventions
-            // for tropical astrology. Do NOT swap this for the J2000-based
-            // Astronomy.Ecliptic(GeoVector(...)) path — that drifts from
-            // astro.com by ~50″/year due to precession, which can flip
-            // planets across sign boundaries.
+            // Geocentric ecliptic longitude in the TRUE ecliptic of date.
+            // This matches Swiss Ephemeris / astro.com conventions for
+            // tropical astrology. Chain: J2000 equatorial geocentric vector
+            // → rotate into ecliptic-of-date → atan2 for the longitude.
+            //
+            // Do NOT use Astronomy.EclipticLongitude — that returns the
+            // HELIOCENTRIC longitude and throws on the Sun.
+            // Do NOT use Astronomy.Ecliptic(GeoVector(...)) either — that
+            // returns J2000 ecliptic and drifts from astro.com by ~50″/year
+            // due to precession, enough to flip planets across sign cusps.
             const body = Astronomy.Body[bodyName];
-            return Astronomy.EclipticLongitude(body, date);
+            const equJ2000 = Astronomy.GeoVector(body, date, true);
+            const rot = Astronomy.Rotation_EQJ_ECT(date);
+            const ect = Astronomy.RotateVector(rot, equJ2000);
+            const lonDeg = Math.atan2(ect.y, ect.x) * 180 / Math.PI;
+            return ((lonDeg % 360) + 360) % 360;
         }
 
         function longitudeToSign(lon) {
