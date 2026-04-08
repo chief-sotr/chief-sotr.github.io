@@ -771,7 +771,9 @@
         }
 
         function computeNatalChart(birthDate, lat, lon) {
-            if (typeof Astronomy === 'undefined') return '';
+            if (typeof Astronomy === 'undefined') {
+                throw new Error('Astronomy Engine failed to load (check your network / adblocker).');
+            }
             try {
                 const positions = BODY_NAMES.map(name => ({
                     name,
@@ -807,8 +809,8 @@
 
                 return lines.join('\n');
             } catch (e) {
-                console.warn('Natal chart failed:', e);
-                return '';
+                console.error('Natal chart failed:', e);
+                throw new Error(`Natal chart failed: ${e.message || e}`);
             }
         }
 
@@ -1097,17 +1099,12 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
                     return;
                 }
 
-                let birthDate;
+                let birthDate, chart;
                 try {
                     birthDate = localToUtc(dateStr, timeStr, tz);
+                    chart = computeNatalChart(birthDate, lat, lon);
                 } catch (err) {
-                    errEl.textContent = err.message;
-                    return;
-                }
-
-                const chart = computeNatalChart(birthDate, lat, lon);
-                if (!chart) {
-                    errEl.textContent = 'Chart computation failed. Reload the page and try again.';
+                    errEl.textContent = err.message || String(err);
                     return;
                 }
 
