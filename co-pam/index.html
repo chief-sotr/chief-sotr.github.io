@@ -311,6 +311,121 @@
             cursor: pointer;
         }
 
+        .birth-form {
+            max-width: 420px;
+            margin: 10px auto;
+            padding: 20px;
+            background: rgba(40, 20, 60, 0.5);
+            border: 1px solid rgba(200, 150, 255, 0.25);
+            border-radius: 10px;
+        }
+
+        .birth-form h3 {
+            color: #d4a5ff;
+            font-size: 16px;
+            margin-bottom: 6px;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .birth-form .intro {
+            color: #a89acc;
+            font-size: 13px;
+            text-align: center;
+            margin-bottom: 14px;
+            line-height: 1.5;
+        }
+
+        .birth-form label {
+            display: block;
+            color: #a89acc;
+            font-size: 11px;
+            margin-top: 12px;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .birth-form input,
+        .birth-form select {
+            width: 100%;
+            padding: 10px 12px;
+            background: rgba(20, 10, 35, 0.8);
+            border: 1px solid rgba(200, 150, 255, 0.3);
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 16px;
+            font-family: inherit;
+        }
+
+        .birth-form input:focus,
+        .birth-form select:focus {
+            outline: none;
+            border-color: rgba(200, 150, 255, 0.6);
+        }
+
+        .birth-form .row-2 {
+            display: flex;
+            gap: 10px;
+        }
+
+        .birth-form .row-2 > div {
+            flex: 1;
+        }
+
+        .birth-form .helper {
+            font-size: 11px;
+            color: #806c99;
+            margin-top: 5px;
+            line-height: 1.4;
+        }
+
+        .birth-form .helper a {
+            color: #d4a5ff;
+            text-decoration: underline;
+        }
+
+        .birth-form button.cast-btn {
+            width: 100%;
+            margin-top: 18px;
+        }
+
+        .birth-form .form-error {
+            color: #ff9ab0;
+            font-size: 12px;
+            margin-top: 10px;
+            text-align: center;
+            min-height: 16px;
+        }
+
+        .chart-pill {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            max-width: 420px;
+            margin: 0 auto 16px;
+            padding: 10px 16px;
+            background: rgba(138, 43, 226, 0.2);
+            border: 1px solid rgba(200, 150, 255, 0.3);
+            border-radius: 999px;
+            font-size: 12px;
+            color: #d4a5ff;
+        }
+
+        .chart-pill button {
+            padding: 4px 10px;
+            font-size: 11px;
+            background: transparent;
+            border: 1px solid rgba(200, 150, 255, 0.4);
+            border-radius: 4px;
+        }
+
+        .chart-pill button:hover {
+            background: rgba(138, 43, 226, 0.3);
+            transform: none;
+        }
+
         #setupModal {
             display: none;
             position: fixed;
@@ -456,8 +571,14 @@
         const ASPECT_ORB = 5; // degrees
 
         function geoLongitude(bodyName, date) {
+            // Geocentric ecliptic longitude of date (apparent, mean ecliptic
+            // of date). This matches Swiss Ephemeris / astro.com conventions
+            // for tropical astrology. Do NOT swap this for the J2000-based
+            // Astronomy.Ecliptic(GeoVector(...)) path — that drifts from
+            // astro.com by ~50″/year due to precession, which can flip
+            // planets across sign boundaries.
             const body = Astronomy.Body[bodyName];
-            return Astronomy.Ecliptic(Astronomy.GeoVector(body, date, true)).elon;
+            return Astronomy.EclipticLongitude(body, date);
         }
 
         function longitudeToSign(lon) {
@@ -586,6 +707,103 @@
             }
         }
 
+        // ============================================================
+        // NATAL CHART (computed from user-submitted birth details)
+        // ============================================================
+        // Mirrors computeCosmicSnapshot() but for a fixed birth moment.
+        // Produces a NATAL CHART text block appended to the system prompt
+        // so Claude reads planetary placements from deterministic ground
+        // truth instead of hallucinating from training data.
+
+        // Mean obliquity of the ecliptic (IAU 1980) — sufficient for
+        // sign-precision astrology (<1″ drift across ±5000 years near 2000).
+        function meanObliquity(date) {
+            const JD_UNIX_EPOCH = 2440587.5;
+            const jd = JD_UNIX_EPOCH + date.getTime() / 86400000;
+            const T = (jd - 2451545.0) / 36525;
+            // Arc-seconds, then converted to degrees.
+            const epsArcsec = 84381.448 - 46.8150 * T - 0.00059 * T * T + 0.001813 * T * T * T;
+            return (epsArcsec / 3600) * Math.PI / 180; // radians
+        }
+
+        function computeAscendantAndMC(date, lat, lon) {
+            // Local Apparent Sidereal Time in degrees.
+            // Astronomy.SiderealTime returns Greenwich sidereal hours.
+            const gstHours = Astronomy.SiderealTime(date);
+            let lstHours = gstHours + lon / 15; // eastern longitude positive
+            lstHours = ((lstHours % 24) + 24) % 24;
+            const ramcDeg = lstHours * 15;
+            const ramcRad = ramcDeg * Math.PI / 180;
+
+            const eps = meanObliquity(date);
+            const latRad = lat * Math.PI / 180;
+
+            // MC longitude: atan2(sin(RAMC), cos(RAMC)*cos(eps))
+            let mcRad = Math.atan2(Math.sin(ramcRad), Math.cos(ramcRad) * Math.cos(eps));
+            let mcDeg = ((mcRad * 180 / Math.PI) % 360 + 360) % 360;
+
+            // Ascendant longitude (Meeus Astronomical Algorithms, Ch. 13):
+            //   tan(Asc) = -cos(RAMC) / (sin(RAMC)*cos(eps) + tan(lat)*sin(eps))
+            // Using atan2 for correct quadrant.
+            let ascRad = Math.atan2(
+                -Math.cos(ramcRad),
+                Math.sin(ramcRad) * Math.cos(eps) + Math.tan(latRad) * Math.sin(eps)
+            );
+            let ascDeg = ((ascRad * 180 / Math.PI) % 360 + 360) % 360;
+
+            // The Ascendant must be in the eastern (rising) half of the ecliptic.
+            // By convention, Asc lies ~90° counter-clockwise from the MC on
+            // the ecliptic. If our value is on the wrong side, flip by 180°.
+            const diff = ((ascDeg - mcDeg) % 360 + 360) % 360;
+            if (diff < 0 || diff > 180) {
+                ascDeg = (ascDeg + 180) % 360;
+            }
+
+            return { asc: ascDeg, mc: mcDeg };
+        }
+
+        function computeNatalChart(birthDate, lat, lon) {
+            if (typeof Astronomy === 'undefined') return '';
+            try {
+                const positions = BODY_NAMES.map(name => ({
+                    name,
+                    lon: geoLongitude(name, birthDate),
+                    retrograde: isRetrograde(name, birthDate)
+                }));
+
+                const { asc, mc } = computeAscendantAndMC(birthDate, lat, lon);
+                const aspects = detectAspects(positions, birthDate);
+
+                const isoMinute = birthDate.toISOString().slice(0, 16).replace('T', ' ');
+                const lines = [];
+                lines.push(`## NATAL CHART (birth: ${isoMinute} UTC, lat ${lat.toFixed(2)}°, lon ${lon.toFixed(2)}°)`);
+                lines.push('');
+                positions.forEach(p => {
+                    let line = `**${p.name}**: ${formatSign(p.lon)}`;
+                    if (p.name !== 'Sun' && p.name !== 'Moon') {
+                        line += p.retrograde ? ' (retrograde)' : ' (direct)';
+                    }
+                    lines.push(line);
+                });
+                lines.push(`**Ascendant**: ${formatSign(asc)}`);
+                lines.push(`**Midheaven**: ${formatSign(mc)}`);
+
+                if (aspects.length > 0) {
+                    lines.push('');
+                    lines.push(`### Natal Major Aspects (within ${ASPECT_ORB}° orb)`);
+                    aspects.forEach(asp => {
+                        const orbStr = asp.orb.toFixed(1);
+                        lines.push(`- ${asp.a} ${asp.glyph} ${asp.b} (${asp.aspect}, ${orbStr}° orb)`);
+                    });
+                }
+
+                return lines.join('\n');
+            } catch (e) {
+                console.warn('Natal chart failed:', e);
+                return '';
+            }
+        }
+
         // ENHANCED SYSTEM PROMPT WITH PAM GREGORY'S ACTUAL TEACHINGS
         const SYSTEM_PROMPT = `You are an astrology consultant channeling the wisdom and compassionate approach of Pam Gregory, the renowned UK astrologer with 45+ years of professional expertise. You embody her philosophy, voice, and actual teachings about astrology, consciousness, and human transformation.
 
@@ -654,6 +872,8 @@ Extraordinary collective transformation:
 - Everyone's timeline is different—step into new reality at your own pace
 
 **Live planetary positions for the current moment are appended at the end of this prompt under "TODAY'S SKY". When the user asks about the current sky, today's transits, what sign the Moon/Sun/any planet is in, retrogrades, or active aspects, reference that live block as the source of truth — trust it over any general training-data knowledge about 2025-2027.**
+
+**The user's natal chart — when their birth details have been captured — is appended under a block titled "NATAL CHART" (before TODAY'S SKY). Treat that block as the single source of truth for their natal placements, Ascendant, and Midheaven. NEVER guess, infer, or compute natal positions from training data; you will be wrong. If no NATAL CHART block is present, do not invent placements — instead, warmly ask the user to fill in their birth details in the form at the top of the chat so the app can cast the chart for you.**
 
 ## HOW TO CONSULT
 
@@ -757,20 +977,195 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
             userInput.focus();
         }
 
-        function renderWelcome() {
-            chatMessagesDiv.innerHTML = `
-                <div id="welcome" style="text-align: center; padding-top: 20px;">
-                    <div style="font-size: 32px; margin-bottom: 10px;">🌙</div>
-                    <p style="color: #d4a5ff; margin-bottom: 15px; font-weight: 500;">Welcome to your astrology consultation</p>
-                    <p style="font-size: 13px; color: #806c99; line-height: 1.6;">
-                        I'm here to help you understand the cosmic patterns in your life and how to work with them for your highest growth and co-creation.<br><br>
-                        To begin, share your birth details (date, time, location) and what brought you here today.
-                    </p>
-                </div>
+        // ============================================================
+        // NATAL CHART STATE + BIRTH FORM UI
+        // ============================================================
+        const NATAL_STORAGE_KEY = 'copam_natal_chart';
+
+        function loadNatalState() {
+            try {
+                const raw = localStorage.getItem(NATAL_STORAGE_KEY);
+                return raw ? JSON.parse(raw) : null;
+            } catch {
+                return null;
+            }
+        }
+
+        function saveNatalState(state) {
+            localStorage.setItem(NATAL_STORAGE_KEY, JSON.stringify(state));
+        }
+
+        // Convert a naive wall-clock in an arbitrary IANA timezone to an
+        // absolute UTC Date. JS's Date constructor only understands the
+        // browser's local tz, so we use Intl.DateTimeFormat to measure the
+        // offset the target tz would assign to that moment, then correct.
+        function localToUtc(dateStr, timeStr, tz) {
+            const naiveUtcMs = Date.parse(`${dateStr}T${timeStr}:00Z`);
+            if (isNaN(naiveUtcMs)) throw new Error('Invalid date or time');
+            const fmt = new Intl.DateTimeFormat('en-US', {
+                timeZone: tz,
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false
+            });
+            const parts = Object.fromEntries(
+                fmt.formatToParts(new Date(naiveUtcMs))
+                    .filter(p => p.type !== 'literal')
+                    .map(p => [p.type, p.value])
+            );
+            if (parts.hour === '24') parts.hour = '00';
+            const asInTzMs = Date.UTC(
+                Number(parts.year),
+                Number(parts.month) - 1,
+                Number(parts.day),
+                Number(parts.hour),
+                Number(parts.minute),
+                Number(parts.second)
+            );
+            const offsetMs = asInTzMs - naiveUtcMs;
+            return new Date(naiveUtcMs - offsetMs);
+        }
+
+        function birthFormHtml(prefill = {}) {
+            const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const tzList = (typeof Intl.supportedValuesOf === 'function')
+                ? Intl.supportedValuesOf('timeZone')
+                : [browserTz];
+            const selectedTz = prefill.tz || browserTz;
+            const tzOptions = tzList.map(tz =>
+                `<option value="${tz}"${tz === selectedTz ? ' selected' : ''}>${tz}</option>`
+            ).join('');
+
+            return `
+                <form class="birth-form" id="birthForm">
+                    <h3>Your Birth Details</h3>
+                    <p class="intro">We use these to cast your chart. They're stored only in your browser.</p>
+
+                    <label for="birthDate">Birth date</label>
+                    <input type="date" id="birthDate" value="${prefill.date || ''}" required>
+
+                    <label for="birthTime">Birth time (local)</label>
+                    <input type="time" id="birthTime" value="${prefill.time || ''}" required>
+                    <div class="helper">As exact as possible — rising sign shifts roughly every 4 minutes.</div>
+
+                    <label for="birthTz">Timezone at birth</label>
+                    <select id="birthTz" required>${tzOptions}</select>
+                    <div class="helper">Pre-filled to your current timezone. Change if you were born elsewhere.</div>
+
+                    <div class="row-2">
+                        <div>
+                            <label for="birthLat">Latitude</label>
+                            <input type="number" id="birthLat" step="0.0001" min="-90" max="90" placeholder="48.8566" value="${prefill.lat ?? ''}" required>
+                        </div>
+                        <div>
+                            <label for="birthLon">Longitude</label>
+                            <input type="number" id="birthLon" step="0.0001" min="-180" max="180" placeholder="2.3522" value="${prefill.lon ?? ''}" required>
+                        </div>
+                    </div>
+                    <div class="helper">Coordinates of your birth city — east and north are positive. <a href="https://www.latlong.net/" target="_blank" rel="noopener">Look them up</a>.</div>
+
+                    <button type="submit" class="cast-btn">Cast my chart ✨</button>
+                    <div class="form-error" id="birthFormError"></div>
+                </form>
             `;
         }
 
+        function attachBirthFormHandlers() {
+            const form = document.getElementById('birthForm');
+            if (!form) return;
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const errEl = document.getElementById('birthFormError');
+                errEl.textContent = '';
+
+                const dateStr = document.getElementById('birthDate').value;
+                const timeStr = document.getElementById('birthTime').value;
+                const tz = document.getElementById('birthTz').value;
+                const lat = parseFloat(document.getElementById('birthLat').value);
+                const lon = parseFloat(document.getElementById('birthLon').value);
+
+                if (!dateStr || !timeStr || !tz || isNaN(lat) || isNaN(lon)) {
+                    errEl.textContent = 'Please fill in every field.';
+                    return;
+                }
+
+                let birthDate;
+                try {
+                    birthDate = localToUtc(dateStr, timeStr, tz);
+                } catch (err) {
+                    errEl.textContent = err.message;
+                    return;
+                }
+
+                const chart = computeNatalChart(birthDate, lat, lon);
+                if (!chart) {
+                    errEl.textContent = 'Chart computation failed. Reload the page and try again.';
+                    return;
+                }
+
+                const state = {
+                    dateStr, timeStr, tz, lat, lon,
+                    isoUtc: birthDate.toISOString(),
+                    birthLocal: `${dateStr} ${timeStr} (${tz})`,
+                    chart
+                };
+                saveNatalState(state);
+                renderWelcome();
+                if (!userInput.disabled) userInput.focus();
+            });
+        }
+
+        function editBirthChart() {
+            const state = loadNatalState() || {};
+            chatMessagesDiv.innerHTML = `
+                <div id="welcome" style="text-align: center; padding-top: 10px;">
+                    <p style="color: #d4a5ff; font-weight: 500;">Edit your birth details</p>
+                </div>
+                ${birthFormHtml({
+                    date: state.dateStr,
+                    time: state.timeStr,
+                    tz: state.tz,
+                    lat: state.lat,
+                    lon: state.lon
+                })}
+            `;
+            attachBirthFormHandlers();
+        }
+
+        function renderWelcome() {
+            const natalState = loadNatalState();
+            if (natalState) {
+                chatMessagesDiv.innerHTML = `
+                    <div class="chart-pill" id="chartPill">
+                        <span>✨ Chart cast for ${natalState.birthLocal}</span>
+                        <button type="button" onclick="editBirthChart()">Edit</button>
+                    </div>
+                    <div id="welcome" style="text-align: center; padding-top: 10px;">
+                        <div style="font-size: 32px; margin-bottom: 10px;">🌙</div>
+                        <p style="color: #d4a5ff; margin-bottom: 15px; font-weight: 500;">Welcome to your astrology consultation</p>
+                        <p style="font-size: 13px; color: #806c99; line-height: 1.6; max-width: 460px; margin: 0 auto;">
+                            Your chart is loaded and ready. Ask me about your placements, today's transits, or what's brewing in the cosmic weather — I'll read from your chart as the source of truth.
+                        </p>
+                    </div>
+                `;
+            } else {
+                chatMessagesDiv.innerHTML = `
+                    <div id="welcome" style="text-align: center; padding-top: 10px;">
+                        <div style="font-size: 32px; margin-bottom: 6px;">🌙</div>
+                        <p style="color: #d4a5ff; margin-bottom: 8px; font-weight: 500;">Welcome to your astrology consultation</p>
+                        <p style="font-size: 13px; color: #806c99; line-height: 1.6; max-width: 420px; margin: 0 auto 10px;">
+                            Fill in your birth details below to cast your chart. Once it's loaded, I'll read from it and connect the cosmic weather to who you are.
+                        </p>
+                    </div>
+                    ${birthFormHtml()}
+                `;
+                attachBirthFormHandlers();
+            }
+        }
+
         function newConsultation() {
+            // Preserve the natal chart across conversations — it's persistent
+            // identity data. Only clear messages and re-render the welcome.
             conversationHistory = [];
             renderWelcome();
             if (!userInput.disabled) userInput.focus();
@@ -878,13 +1273,19 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
 
             let authFailure = false;
             try {
-                // Augment the system prompt with a fresh live planetary snapshot.
-                // computeCosmicSnapshot() returns '' if Astronomy Engine failed
-                // to load — in which case we fall back to the static prompt.
+                // Augment the system prompt with:
+                //   (1) the user's precomputed natal chart (if they've
+                //       submitted birth details) — deterministic ground truth
+                //       so Claude never hallucinates natal placements.
+                //   (2) a fresh live planetary snapshot for "today's sky".
+                // Both helpers return '' if Astronomy Engine failed to load.
                 const cosmicSnapshot = computeCosmicSnapshot();
-                const augmentedSystem = cosmicSnapshot
-                    ? SYSTEM_PROMPT + '\n\n---\n\n' + cosmicSnapshot
-                    : SYSTEM_PROMPT;
+                const natalState = loadNatalState();
+                const natalBlock = natalState?.chart || '';
+                const pieces = [SYSTEM_PROMPT];
+                if (natalBlock) pieces.push(natalBlock);
+                if (cosmicSnapshot) pieces.push(cosmicSnapshot);
+                const augmentedSystem = pieces.join('\n\n---\n\n');
 
                 const response = await fetch('https://api.anthropic.com/v1/messages', {
                     method: 'POST',
