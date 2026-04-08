@@ -770,7 +770,7 @@
             return { asc: ascDeg, mc: mcDeg };
         }
 
-        function computeNatalChart(birthDate, lat, lon) {
+        function computeNatalChart(birthDate, lat, lon, dateStr, timeStr, tz) {
             if (typeof Astronomy === 'undefined') {
                 throw new Error('Astronomy Engine failed to load (check your network / adblocker).');
             }
@@ -786,7 +786,7 @@
 
                 const isoMinute = birthDate.toISOString().slice(0, 16).replace('T', ' ');
                 const lines = [];
-                lines.push(`## NATAL CHART (birth: ${isoMinute} UTC, lat ${lat.toFixed(2)}°, lon ${lon.toFixed(2)}°)`);
+                lines.push(`## NATAL CHART (birth: ${dateStr} ${timeStr} ${tz} / ${isoMinute} UTC, lat ${lat.toFixed(2)}°, lon ${lon.toFixed(2)}°)`);
                 lines.push('');
                 positions.forEach(p => {
                     let line = `**${p.name}**: ${formatSign(p.lon)}`;
@@ -883,7 +883,7 @@ Extraordinary collective transformation:
 
 **Live planetary positions for the current moment are appended at the end of this prompt under "TODAY'S SKY". When the user asks about the current sky, today's transits, what sign the Moon/Sun/any planet is in, retrogrades, or active aspects, reference that live block as the source of truth — trust it over any general training-data knowledge about 2025-2027.**
 
-**The user's natal chart — when their birth details have been captured — is appended under a block titled "NATAL CHART" (before TODAY'S SKY). Treat that block as the single source of truth for their natal placements, Ascendant, and Midheaven. NEVER guess, infer, or compute natal positions from training data; you will be wrong. If no NATAL CHART block is present, do not invent placements — instead, warmly ask the user to fill in their birth details in the form at the top of the chat so the app can cast the chart for you.**
+**The user's natal chart — when their birth details have been captured — is appended under a block titled "NATAL CHART" (before TODAY'S SKY). Treat that block as the single source of truth for their natal placements, Ascendant, and Midheaven. NEVER guess, infer, or compute natal positions from training data; you will be wrong. If no NATAL CHART block is present, do not invent placements — instead, warmly ask the user to fill in their birth details in the form at the top of the chat so the app can cast the chart for you. When referencing the user's birth time in conversation, use the local time and IANA timezone shown FIRST in the chart header (e.g. "1982-10-20 11:30 Europe/Paris"), not the UTC translation after the slash — users think in their birth city's local time, and quoting UTC will confuse them.**
 
 ## HOW TO CONSULT
 
@@ -1102,7 +1102,7 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
                 let birthDate, chart;
                 try {
                     birthDate = localToUtc(dateStr, timeStr, tz);
-                    chart = computeNatalChart(birthDate, lat, lon);
+                    chart = computeNatalChart(birthDate, lat, lon, dateStr, timeStr, tz);
                 } catch (err) {
                     errEl.textContent = err.message || String(err);
                     return;
