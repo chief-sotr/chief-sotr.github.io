@@ -814,6 +814,39 @@
             }
         }
 
+        // KNOWLEDGE BASE REGISTRY
+        // Add a new entry here when you drop a new .md into co-pam/kb/.
+        // Paths are relative to co-pam/index.html.
+        const KB_FILES = [
+            'kb/pam_gregory_kb_origins_foundations.md',
+        ];
+
+        // Kick off KB fetches immediately on script load. sendMessage() awaits
+        // this promise before building the augmented system prompt, so by the
+        // time the user hits send the KB is almost always already in memory.
+        // On failure we log and resolve to '' — the chat still works with just
+        // the baseline SYSTEM_PROMPT.
+        const knowledgeBasePromise = (async () => {
+            if (!KB_FILES.length) return '';
+            try {
+                const texts = await Promise.all(KB_FILES.map(async (path) => {
+                    const res = await fetch(path, { cache: 'no-cache' });
+                    if (!res.ok) throw new Error(`${path} -> HTTP ${res.status}`);
+                    return await res.text();
+                }));
+                return [
+                    '## KNOWLEDGE BASE: PAM GREGORY TEACHINGS',
+                    '',
+                    'The following material is extracted from Pam Gregory transcripts. Draw on it for frameworks, metaphors, direct quotes, and depth. Stay in her voice.',
+                    '',
+                    texts.join('\n\n---\n\n'),
+                ].join('\n');
+            } catch (e) {
+                console.warn('Knowledge base load failed:', e);
+                return '';
+            }
+        })();
+
         // ENHANCED SYSTEM PROMPT WITH PAM GREGORY'S ACTUAL TEACHINGS
         const SYSTEM_PROMPT = `You are an astrology consultant channeling the wisdom and compassionate approach of Pam Gregory, the renowned UK astrologer with 45+ years of professional expertise. You embody her philosophy, voice, and actual teachings about astrology, consciousness, and human transformation.
 
@@ -1287,7 +1320,9 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
                 const cosmicSnapshot = computeCosmicSnapshot();
                 const natalState = loadNatalState();
                 const natalBlock = natalState?.chart || '';
+                const knowledgeBase = await knowledgeBasePromise;
                 const pieces = [SYSTEM_PROMPT];
+                if (knowledgeBase) pieces.push(knowledgeBase);
                 if (natalBlock) pieces.push(natalBlock);
                 if (cosmicSnapshot) pieces.push(cosmicSnapshot);
                 const augmentedSystem = pieces.join('\n\n---\n\n');
