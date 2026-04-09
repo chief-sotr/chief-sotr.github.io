@@ -106,6 +106,10 @@
             justify-content: flex-end;
         }
 
+        .message.assistant {
+            scroll-margin-top: 20px;
+        }
+
         .message-content {
             max-width: 80%;
             padding: 12px 16px;
@@ -1269,7 +1273,12 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
 
             messageDiv.appendChild(contentDiv);
             chatMessagesDiv.appendChild(messageDiv);
-            chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
+            if (role === 'assistant') {
+                // Anchor the top of the new response so long replies are read from the start.
+                messageDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else {
+                chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
+            }
         }
 
         function showThinking() {
