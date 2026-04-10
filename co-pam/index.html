@@ -795,7 +795,7 @@
             return found;
         }
 
-        function computeCosmicSnapshot(date = new Date()) {
+        function computeCosmicSnapshot(date = new Date(), userTz = null) {
             if (typeof Astronomy === 'undefined') return '';
             try {
                 const positions = BODY_NAMES.map(name => ({
@@ -811,8 +811,30 @@
 
                 const aspects = detectAspects(positions, date);
 
+                // Format both the user's LOCAL wall-clock and UTC. The local one
+                // is what the user means by "today" — without it the model only
+                // sees UTC and reports tomorrow's date for anyone west of GMT
+                // after their local evening. Planetary math still uses the UTC
+                // Date object internally.
+                const tz = userTz || Intl.DateTimeFormat().resolvedOptions().timeZone;
+                const localFmt = new Intl.DateTimeFormat('en-CA', {
+                    timeZone: tz,
+                    year: 'numeric', month: '2-digit', day: '2-digit',
+                    hour: '2-digit', minute: '2-digit', hour12: false,
+                    weekday: 'long'
+                });
+                const parts = Object.fromEntries(
+                    localFmt.formatToParts(date)
+                        .filter(p => p.type !== 'literal')
+                        .map(p => [p.type, p.value])
+                );
+                const localStr = `${parts.weekday} ${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute} ${tz}`;
+                const utcStr = date.toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+
                 const lines = [];
-                lines.push(`## TODAY'S SKY (live, computed ${date.toISOString().slice(0, 16).replace('T', ' ')} UTC)`);
+                lines.push(`## TODAY'S SKY (user-local: ${localStr} / ${utcStr})`);
+                lines.push('');
+                lines.push(`*"Today" from the user's perspective is **${parts.weekday}, ${parts.year}-${parts.month}-${parts.day}** in ${tz}. Use that date when the user asks "what day is today" — the UTC date may differ if they're west of GMT in the evening or east of GMT in the early morning.*`);
                 lines.push('');
                 positions.forEach(p => {
                     let line = `**${p.name}**: ${formatSign(p.lon)}`;
@@ -1715,8 +1737,10 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
                 //       so Claude never hallucinates natal placements.
                 //   (2) a fresh live planetary snapshot for "today's sky".
                 // Both helpers return '' if Astronomy Engine failed to load.
-                const cosmicSnapshot = computeCosmicSnapshot();
                 const natalState = loadNatalState();
+                // Pass the user's natal tz so the snapshot header reads in
+                // their local wall-clock; falls back to browser tz if no chart.
+                const cosmicSnapshot = computeCosmicSnapshot(new Date(), natalState?.tz);
                 const natalBlock = natalState?.chart || '';
                 const knowledgeBase = await knowledgeBasePromise;
                 const pieces = [SYSTEM_PROMPT];
