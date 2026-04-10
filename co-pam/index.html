@@ -1214,16 +1214,18 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
         // Resolve an IANA timezone from coordinates via timeapi.io (free, keyless).
         // Returns a string like 'Europe/Paris', or null on failure so the caller
         // can fall back to a manual tz picker.
+        //
+        // We use the legacy `www.timeapi.io/api/timezone/coordinate` host/path
+        // because the newer `/api/v1/timezone/coordinate` endpoint serves the
+        // data but does NOT include `Access-Control-Allow-Origin`, so browsers
+        // block it. The legacy path returns CORS headers and the camelCase
+        // `timeZone` field, which is what we want.
         async function lookupTimezone(lat, lon) {
             try {
-                const url = `https://timeapi.io/api/v1/timezone/coordinate?latitude=${lat}&longitude=${lon}`;
-                const res = await fetch(url, {
-                    headers: { 'Accept': 'application/json' }
-                });
+                const url = `https://www.timeapi.io/api/timezone/coordinate?latitude=${lat}&longitude=${lon}`;
+                const res = await fetch(url);
                 if (!res.ok) return null;
                 const data = await res.json();
-                // timeapi.io returns { timeZone: "Europe/Paris", ... }. Guard against
-                // lowercase variants just in case the API changes casing.
                 return data.timeZone || data.timezone || null;
             } catch (e) {
                 console.warn('Timezone lookup failed:', e);
