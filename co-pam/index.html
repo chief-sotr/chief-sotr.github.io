@@ -402,6 +402,127 @@
             min-height: 16px;
         }
 
+        .birth-form .location-row {
+            display: flex;
+            gap: 8px;
+            align-items: stretch;
+        }
+
+        .birth-form .location-row input {
+            flex: 1;
+        }
+
+        .birth-form .search-btn {
+            flex: 0 0 auto;
+            padding: 0 16px;
+            margin: 0;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        .birth-form .search-btn[disabled] {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
+        .birth-form .location-results {
+            margin-top: 8px;
+            background: rgba(20, 10, 35, 0.9);
+            border: 1px solid rgba(200, 150, 255, 0.3);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .birth-form .location-results .result {
+            padding: 10px 12px;
+            font-size: 13px;
+            color: #e0e0e0;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(200, 150, 255, 0.1);
+            line-height: 1.4;
+        }
+
+        .birth-form .location-results .result:last-child {
+            border-bottom: none;
+        }
+
+        .birth-form .location-results .result:hover {
+            background: rgba(138, 43, 226, 0.25);
+        }
+
+        .birth-form .location-confirmed {
+            margin-top: 10px;
+            padding: 10px 14px;
+            background: rgba(138, 43, 226, 0.18);
+            border: 1px solid rgba(200, 150, 255, 0.35);
+            border-radius: 8px;
+            font-size: 12px;
+            color: #d4a5ff;
+            line-height: 1.5;
+        }
+
+        .birth-form .location-confirmed .place {
+            color: #e0d3ff;
+            font-weight: 500;
+        }
+
+        .birth-form .location-confirmed .tz-line {
+            color: #a89acc;
+            margin-top: 3px;
+            font-size: 11px;
+        }
+
+        .birth-form .location-confirmed .tz-resolving {
+            color: #806c99;
+            font-style: italic;
+        }
+
+        .birth-form .manual-fallback-toggle {
+            display: inline-block;
+            margin-top: 8px;
+            font-size: 11px;
+            color: #a89acc;
+            background: none;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+            text-decoration: underline;
+            width: auto;
+        }
+
+        .birth-form .manual-fallback-toggle:hover {
+            color: #d4a5ff;
+            background: none;
+            transform: none;
+        }
+
+        .birth-form .manual-fallback {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px dashed rgba(200, 150, 255, 0.2);
+        }
+
+        .birth-form .manual-fallback[hidden] {
+            display: none;
+        }
+
+        .birth-form button.cast-btn[disabled] {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .birth-form .attribution {
+            font-size: 10px;
+            color: #6b5a85;
+            text-align: center;
+            margin-top: 14px;
+        }
+
+        .birth-form .attribution a {
+            color: #806c99;
+            text-decoration: underline;
+        }
+
         .chart-pill {
             display: flex;
             align-items: center;
@@ -1074,6 +1195,172 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
             return new Date(naiveUtcMs - offsetMs);
         }
 
+        // Free-form geocoding via the public Nominatim (OpenStreetMap) instance.
+        // Rate limit: 1 req/sec. We only fire on explicit user action (Enter /
+        // Search button), never on keystroke, so this is comfortably within the
+        // policy for single-user volume. Returns [] on empty query.
+        async function searchLocation(query) {
+            const q = (query || '').trim();
+            if (!q) return [];
+            const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=jsonv2&limit=5&addressdetails=1`;
+            const res = await fetch(url, {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (!res.ok) throw new Error(`Location search failed (${res.status})`);
+            const data = await res.json();
+            return Array.isArray(data) ? data : [];
+        }
+
+        // Resolve an IANA timezone from coordinates via timeapi.io (free, keyless).
+        // Returns a string like 'Europe/Paris', or null on failure so the caller
+        // can fall back to a manual tz picker.
+        async function lookupTimezone(lat, lon) {
+            try {
+                const url = `https://timeapi.io/api/v1/timezone/coordinate?latitude=${lat}&longitude=${lon}`;
+                const res = await fetch(url, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (!res.ok) return null;
+                const data = await res.json();
+                // timeapi.io returns { timeZone: "Europe/Paris", ... }. Guard against
+                // lowercase variants just in case the API changes casing.
+                return data.timeZone || data.timezone || null;
+            } catch (e) {
+                console.warn('Timezone lookup failed:', e);
+                return null;
+            }
+        }
+
+        // Per-form resolved-location state. Keyed on the form element so multiple
+        // form instances (edit re-renders) don't bleed into each other.
+        const formLocationState = new WeakMap();
+
+        function getLocationState(formEl) {
+            if (!formLocationState.has(formEl)) {
+                formLocationState.set(formEl, { lat: null, lon: null, tz: null, displayName: '', query: '' });
+            }
+            return formLocationState.get(formEl);
+        }
+
+        function updateCastButton(formEl) {
+            const state = getLocationState(formEl);
+            const castBtn = formEl.querySelector('#castBtn');
+            const ready = state.lat != null && state.lon != null && state.tz;
+            castBtn.disabled = !ready;
+        }
+
+        function renderLocationResults(results, formEl) {
+            const container = formEl.querySelector('#locationResults');
+            if (!results.length) {
+                container.hidden = true;
+                container.innerHTML = '';
+                return;
+            }
+            container.hidden = false;
+            container.innerHTML = results.map((r, i) => {
+                // Escape HTML in display_name; Nominatim returns raw user-generated text.
+                const safeName = r.display_name
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+                return `<div class="result" data-index="${i}">${safeName}</div>`;
+            }).join('');
+            container.querySelectorAll('.result').forEach(el => {
+                el.addEventListener('click', () => {
+                    const idx = Number(el.dataset.index);
+                    selectLocation(results[idx], formEl);
+                });
+            });
+        }
+
+        async function selectLocation(result, formEl) {
+            const state = getLocationState(formEl);
+            const lat = parseFloat(result.lat);
+            const lon = parseFloat(result.lon);
+            state.lat = lat;
+            state.lon = lon;
+            state.displayName = result.display_name;
+            // Preserve whatever the user actually typed as the canonical query.
+            const queryInput = formEl.querySelector('#birthLocation');
+            state.query = queryInput.value.trim();
+
+            // Hide the results list, show confirmation row with a "resolving tz" line.
+            formEl.querySelector('#locationResults').hidden = true;
+            const confirmed = formEl.querySelector('#locationConfirmed');
+            const placeEl = formEl.querySelector('#locationConfirmedPlace');
+            const tzEl = formEl.querySelector('#locationConfirmedTz');
+            confirmed.hidden = false;
+            placeEl.textContent = `📍 ${result.display_name}`;
+            tzEl.className = 'tz-line tz-resolving';
+            tzEl.textContent = 'Resolving timezone…';
+            state.tz = null;
+            updateCastButton(formEl);
+
+            // Try the auto-resolver; if it fails, fall back to a manual tz select
+            // inlined in the confirmation row (preselected to browser tz).
+            const tz = await lookupTimezone(lat, lon);
+            if (tz) {
+                state.tz = tz;
+                tzEl.className = 'tz-line';
+                tzEl.textContent = `Timezone: ${tz}`;
+                updateCastButton(formEl);
+            } else {
+                const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                const tzList = (typeof Intl.supportedValuesOf === 'function')
+                    ? Intl.supportedValuesOf('timeZone')
+                    : [browserTz];
+                const options = tzList.map(z =>
+                    `<option value="${z}"${z === browserTz ? ' selected' : ''}>${z}</option>`
+                ).join('');
+                tzEl.className = 'tz-line';
+                tzEl.innerHTML = `Couldn't auto-detect timezone. Pick one: <select id="inlineTzPicker" style="margin-top: 4px;">${options}</select>`;
+                // Apply the initial selection so the form is submittable.
+                state.tz = browserTz;
+                updateCastButton(formEl);
+                tzEl.querySelector('#inlineTzPicker').addEventListener('change', (e) => {
+                    state.tz = e.target.value;
+                    updateCastButton(formEl);
+                });
+            }
+        }
+
+        function toggleManualFallback(formEl, forceShow) {
+            const fallback = formEl.querySelector('#manualFallback');
+            const show = forceShow != null ? forceShow : fallback.hidden;
+            fallback.hidden = !show;
+        }
+
+        function applyManualCoordinates(formEl) {
+            const latStr = formEl.querySelector('#birthLat').value;
+            const lonStr = formEl.querySelector('#birthLon').value;
+            const tz = formEl.querySelector('#birthTz').value;
+            const lat = parseFloat(latStr);
+            const lon = parseFloat(lonStr);
+            const errEl = formEl.querySelector('#birthFormError');
+            if (isNaN(lat) || isNaN(lon) || !tz) {
+                errEl.textContent = 'Enter valid latitude, longitude, and timezone.';
+                return;
+            }
+            errEl.textContent = '';
+
+            const state = getLocationState(formEl);
+            state.lat = lat;
+            state.lon = lon;
+            state.tz = tz;
+            state.displayName = `${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
+            state.query = '';
+
+            // Mirror into the confirmation row so the UI reflects the resolved state.
+            const confirmed = formEl.querySelector('#locationConfirmed');
+            const placeEl = formEl.querySelector('#locationConfirmedPlace');
+            const tzEl = formEl.querySelector('#locationConfirmedTz');
+            confirmed.hidden = false;
+            placeEl.textContent = `📍 ${state.displayName}`;
+            tzEl.className = 'tz-line';
+            tzEl.textContent = `Timezone: ${tz}`;
+            updateCastButton(formEl);
+        }
+
         function birthFormHtml(prefill = {}) {
             const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
             const tzList = (typeof Intl.supportedValuesOf === 'function')
@@ -1083,6 +1370,17 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
             const tzOptions = tzList.map(tz =>
                 `<option value="${tz}"${tz === selectedTz ? ' selected' : ''}>${tz}</option>`
             ).join('');
+
+            // Backcompat: old saved charts have lat/lon/tz but no locationQuery /
+            // locationDisplayName. If they have coordinates but no friendly name,
+            // fall back to showing the raw coordinates in the confirmation row.
+            const hasPrefillLocation = prefill.lat != null && prefill.lon != null && prefill.tz;
+            const prefillDisplayName = prefill.locationDisplayName
+                || (hasPrefillLocation ? `${prefill.lat.toFixed(4)}°, ${prefill.lon.toFixed(4)}°` : '');
+            const prefillQuery = prefill.locationQuery || '';
+
+            const castDisabled = hasPrefillLocation ? '' : 'disabled';
+            const confirmedHidden = hasPrefillLocation ? '' : 'hidden';
 
             return `
                 <form class="birth-form" id="birthForm">
@@ -1096,44 +1394,127 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
                     <input type="time" id="birthTime" value="${prefill.time || ''}" required>
                     <div class="helper">As exact as possible — rising sign shifts roughly every 4 minutes.</div>
 
-                    <label for="birthTz">Timezone at birth</label>
-                    <select id="birthTz" required>${tzOptions}</select>
-                    <div class="helper">Pre-filled to your current timezone. Change if you were born elsewhere.</div>
-
-                    <div class="row-2">
-                        <div>
-                            <label for="birthLat">Latitude</label>
-                            <input type="number" id="birthLat" step="0.0001" min="-90" max="90" placeholder="48.8566" value="${prefill.lat ?? ''}" required>
-                        </div>
-                        <div>
-                            <label for="birthLon">Longitude</label>
-                            <input type="number" id="birthLon" step="0.0001" min="-180" max="180" placeholder="2.3522" value="${prefill.lon ?? ''}" required>
-                        </div>
+                    <label for="birthLocation">Birth location</label>
+                    <div class="location-row">
+                        <input type="text" id="birthLocation" placeholder="e.g. Paris, France or Brooklyn, NY" value="${prefillQuery.replace(/"/g, '&quot;')}" autocomplete="off">
+                        <button type="button" class="search-btn" id="searchLocationBtn">Search</button>
                     </div>
-                    <div class="helper">Coordinates of your birth city — east and north are positive. <a href="https://www.latlong.net/" target="_blank" rel="noopener">Look them up</a>.</div>
+                    <div class="helper">Type your birth city and press Enter or Search. We'll look up the coordinates and timezone automatically.</div>
+                    <div class="location-results" id="locationResults" hidden></div>
+                    <div class="location-confirmed" id="locationConfirmed" ${confirmedHidden}>
+                        <div class="place" id="locationConfirmedPlace">📍 ${prefillDisplayName}</div>
+                        <div class="tz-line" id="locationConfirmedTz">${prefill.tz ? 'Timezone: ' + prefill.tz : ''}</div>
+                    </div>
 
-                    <button type="submit" class="cast-btn">Cast my chart ✨</button>
+                    <button type="button" class="manual-fallback-toggle" id="manualFallbackToggle">Enter coordinates manually</button>
+                    <div class="manual-fallback" id="manualFallback" hidden>
+                        <label for="birthTz">Timezone at birth</label>
+                        <select id="birthTz">${tzOptions}</select>
+                        <div class="helper">Pre-filled to your current timezone. Change if you were born elsewhere.</div>
+
+                        <div class="row-2">
+                            <div>
+                                <label for="birthLat">Latitude</label>
+                                <input type="number" id="birthLat" step="0.0001" min="-90" max="90" placeholder="48.8566" value="${prefill.lat ?? ''}">
+                            </div>
+                            <div>
+                                <label for="birthLon">Longitude</label>
+                                <input type="number" id="birthLon" step="0.0001" min="-180" max="180" placeholder="2.3522" value="${prefill.lon ?? ''}">
+                            </div>
+                        </div>
+                        <div class="helper">East and north are positive. <a href="https://www.latlong.net/" target="_blank" rel="noopener">Look them up</a>.</div>
+                        <button type="button" class="search-btn" id="applyManualBtn" style="margin-top: 10px;">Use these coordinates</button>
+                    </div>
+
+                    <button type="submit" class="cast-btn" id="castBtn" ${castDisabled}>Cast my chart ✨</button>
                     <div class="form-error" id="birthFormError"></div>
+                    <div class="attribution">Location search powered by <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · timezone via <a href="https://timeapi.io" target="_blank" rel="noopener">timeapi.io</a></div>
                 </form>
             `;
         }
 
-        function attachBirthFormHandlers() {
+        function attachBirthFormHandlers(prefill = {}) {
             const form = document.getElementById('birthForm');
             if (!form) return;
+
+            // Seed per-form resolved state from any prefill (edit flow). If we
+            // have lat/lon/tz already, the form opens with the confirmation row
+            // visible and Cast enabled — no re-search required.
+            const locState = getLocationState(form);
+            if (prefill.lat != null && prefill.lon != null && prefill.tz) {
+                locState.lat = prefill.lat;
+                locState.lon = prefill.lon;
+                locState.tz = prefill.tz;
+                locState.displayName = prefill.locationDisplayName
+                    || `${prefill.lat.toFixed(4)}°, ${prefill.lon.toFixed(4)}°`;
+                locState.query = prefill.locationQuery || '';
+            }
+
+            const locationInput = form.querySelector('#birthLocation');
+            const searchBtn = form.querySelector('#searchLocationBtn');
+            const errEl = form.querySelector('#birthFormError');
+
+            async function runSearch() {
+                const q = locationInput.value.trim();
+                if (!q) {
+                    errEl.textContent = 'Type a city name to search.';
+                    return;
+                }
+                errEl.textContent = '';
+                searchBtn.disabled = true;
+                searchBtn.textContent = 'Searching…';
+                try {
+                    const results = await searchLocation(q);
+                    if (results.length === 0) {
+                        errEl.textContent = 'No location found. Try adding the country, e.g. "Paris, France".';
+                        renderLocationResults([], form);
+                    } else if (results.length === 1) {
+                        // Single hit — auto-select it.
+                        renderLocationResults([], form);
+                        await selectLocation(results[0], form);
+                    } else {
+                        renderLocationResults(results, form);
+                    }
+                } catch (err) {
+                    console.warn('Geocoding failed:', err);
+                    errEl.textContent = 'Location lookup failed. Try entering coordinates manually.';
+                    toggleManualFallback(form, true);
+                } finally {
+                    searchBtn.disabled = false;
+                    searchBtn.textContent = 'Search';
+                }
+            }
+
+            searchBtn.addEventListener('click', runSearch);
+            locationInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    runSearch();
+                }
+            });
+
+            form.querySelector('#manualFallbackToggle').addEventListener('click', () => {
+                toggleManualFallback(form);
+            });
+            form.querySelector('#applyManualBtn').addEventListener('click', () => {
+                applyManualCoordinates(form);
+            });
+
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
-                const errEl = document.getElementById('birthFormError');
                 errEl.textContent = '';
 
-                const dateStr = document.getElementById('birthDate').value;
-                const timeStr = document.getElementById('birthTime').value;
-                const tz = document.getElementById('birthTz').value;
-                const lat = parseFloat(document.getElementById('birthLat').value);
-                const lon = parseFloat(document.getElementById('birthLon').value);
+                const dateStr = form.querySelector('#birthDate').value;
+                const timeStr = form.querySelector('#birthTime').value;
+                const state = getLocationState(form);
+                const { lat, lon, tz, displayName } = state;
 
-                if (!dateStr || !timeStr || !tz || isNaN(lat) || isNaN(lon)) {
-                    errEl.textContent = 'Please fill in every field.';
+                if (!dateStr || !timeStr) {
+                    errEl.textContent = 'Please fill in birth date and time.';
+                    return;
+                }
+                if (lat == null || lon == null || !tz) {
+                    errEl.textContent = 'Please search for and select your birth location first.';
                     return;
                 }
 
@@ -1146,13 +1527,15 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
                     return;
                 }
 
-                const state = {
+                const saved = {
                     dateStr, timeStr, tz, lat, lon,
                     isoUtc: birthDate.toISOString(),
                     birthLocal: `${dateStr} ${timeStr} (${tz})`,
-                    chart
+                    chart,
+                    locationQuery: state.query || '',
+                    locationDisplayName: displayName || ''
                 };
-                saveNatalState(state);
+                saveNatalState(saved);
                 renderWelcome();
                 if (!userInput.disabled) userInput.focus();
             });
@@ -1160,19 +1543,22 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
 
         function editBirthChart() {
             const state = loadNatalState() || {};
+            const prefill = {
+                date: state.dateStr,
+                time: state.timeStr,
+                tz: state.tz,
+                lat: state.lat,
+                lon: state.lon,
+                locationQuery: state.locationQuery,
+                locationDisplayName: state.locationDisplayName
+            };
             chatMessagesDiv.innerHTML = `
                 <div id="welcome" style="text-align: center; padding-top: 10px;">
                     <p style="color: #d4a5ff; font-weight: 500;">Edit your birth details</p>
                 </div>
-                ${birthFormHtml({
-                    date: state.dateStr,
-                    time: state.timeStr,
-                    tz: state.tz,
-                    lat: state.lat,
-                    lon: state.lon
-                })}
+                ${birthFormHtml(prefill)}
             `;
-            attachBirthFormHandlers();
+            attachBirthFormHandlers(prefill);
         }
 
         function renderWelcome() {
