@@ -795,7 +795,7 @@
             return found;
         }
 
-        function computeCosmicSnapshot(date = new Date(), userTz = null) {
+        function computeCosmicSnapshot(date = new Date()) {
             if (typeof Astronomy === 'undefined') return '';
             try {
                 const positions = BODY_NAMES.map(name => ({
@@ -814,9 +814,11 @@
                 // Format both the user's LOCAL wall-clock and UTC. The local one
                 // is what the user means by "today" — without it the model only
                 // sees UTC and reports tomorrow's date for anyone west of GMT
-                // after their local evening. Planetary math still uses the UTC
-                // Date object internally.
-                const tz = userTz || Intl.DateTimeFormat().resolvedOptions().timeZone;
+                // after their local evening. We use the BROWSER's current tz
+                // (where the user is now), NOT the natal tz (where they were
+                // born) — those can differ by continents. Planetary math still
+                // uses the UTC Date object internally.
+                const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
                 const localFmt = new Intl.DateTimeFormat('en-CA', {
                     timeZone: tz,
                     year: 'numeric', month: '2-digit', day: '2-digit',
@@ -1738,9 +1740,12 @@ Bring your whole self—your wisdom, warmth, and genuine care for their growth. 
                 //   (2) a fresh live planetary snapshot for "today's sky".
                 // Both helpers return '' if Astronomy Engine failed to load.
                 const natalState = loadNatalState();
-                // Pass the user's natal tz so the snapshot header reads in
-                // their local wall-clock; falls back to browser tz if no chart.
-                const cosmicSnapshot = computeCosmicSnapshot(new Date(), natalState?.tz);
+                // Always use the browser's current tz for "today's" header —
+                // the natal tz is where the user was BORN, which may be on a
+                // different continent from where they live now. `new Date()`
+                // plus browser tz is the only correct way to say "what day is
+                // it for this user right now".
+                const cosmicSnapshot = computeCosmicSnapshot();
                 const natalBlock = natalState?.chart || '';
                 const knowledgeBase = await knowledgeBasePromise;
                 const pieces = [SYSTEM_PROMPT];
