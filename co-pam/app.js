@@ -72,7 +72,7 @@ function renderWelcome() {
                 <button type="button" onclick="editBirthChart()">Edit</button>
             </div>
             <div id="welcome" style="text-align: center; padding-top: 10px;">
-                <div class="emoji">\ud83c\ud819\u2728</div>
+                <div class="emoji">🌟✨</div>
                 <p style="color: #80ff9a; font-size: 13px; margin-bottom: 4px;">\u2713 Your chart is ready!</p>
                 <h2>What would you like to explore today?</h2>
                 <p style="font-size: 13px; color: #a89acc; line-height: 1.6; max-width: 460px; margin: 0 auto;">
