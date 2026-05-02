@@ -1059,6 +1059,7 @@ function localToUtc(dateStr, timeStr, tz) {
 const KB_FILES = [
     'kb/pam_gregory_kb_origins_foundations.md',
     'kb/pam_gregory_kb_2026_year_of_the_fire_horse.md',
+    'kb/pam_gregory_kb_new_moon_taurus_may_2026.md',
 ];
 
 const knowledgeBasePromise = (async () => {
