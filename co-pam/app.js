@@ -328,11 +328,11 @@ function birthFormHtml(prefill = {}) {
                 <div class="row-2">
                     <div>
                         <label for="birthLat">Latitude</label>
-                        <input type="number" id="birthLat" step="0.0001" min="-90" max="90" placeholder="48.8566" value="${prefill.lat ?? ''}">
+                        <input type="number" id="birthLat" step="any" min="-90" max="90" placeholder="48.8566" value="${prefill.lat ?? ''}">
                     </div>
                     <div>
                         <label for="birthLon">Longitude</label>
-                        <input type="number" id="birthLon" step="0.0001" min="-180" max="180" placeholder="2.3522" value="${prefill.lon ?? ''}">
+                        <input type="number" id="birthLon" step="any" min="-180" max="180" placeholder="2.3522" value="${prefill.lon ?? ''}">
                     </div>
                 </div>
                 <div class="helper">East and north are positive. <a href="https://www.latlong.net/" target="_blank" rel="noopener">Look them up</a>.</div>
