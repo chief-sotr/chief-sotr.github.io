@@ -494,6 +494,7 @@ function attachBirthFormHandlers(prefill = {}) {
             sendBtn.disabled = false;
         }
         userInput.focus();
+        sendOpeningReading();
     });
     
     updateProgressSteps(form);
@@ -662,28 +663,32 @@ function newConsultation() {
         sendBtn.disabled = false;
         userInput.focus();
     }
+    if (loadNatalState()) sendOpeningReading();
 }
 
 // ============================================================
 // SEND MESSAGE
 // ============================================================
 
-async function sendMessage() {
-    // If no API key, prompt for it first
+async function sendMessage(opts = {}) {
+    const { hiddenPrompt = null } = opts;
+
     if (!apiKey) {
         openSetupModal();
         return;
     }
-    
-    const message = userInput.value.trim();
+
+    const message = hiddenPrompt ?? userInput.value.trim();
     if (!message) return;
-    
-    // Clear the welcome block on first send
+
     document.getElementById('welcome')?.remove();
-    
-    userInput.value = '';
-    autoGrow();
-    addMessage('user', message);
+    removeOpeningChips();
+
+    if (!hiddenPrompt) {
+        userInput.value = '';
+        autoGrow();
+        addMessage('user', message);
+    }
     conversationHistory.push({ role: 'user', content: message });
     
     showThinking();
@@ -756,6 +761,43 @@ async function sendMessage() {
 function autoGrow() {
     userInput.style.height = 'auto';
     userInput.style.height = Math.min(userInput.scrollHeight, 160) + 'px';
+}
+
+// ============================================================
+// OPENING READING
+// ============================================================
+
+const OPENING_PROMPT = `My chart has just been cast. Please give me a warm welcome reading in about 3 short paragraphs:
+
+1. Name my Sun, Moon, and Rising signs and give a brief feel for each (one sentence each).
+2. Point out one thing that stands out in my chart — a notable placement, aspect, or pattern that catches your eye.
+3. Invite me to explore further with an open, warm question.
+
+Stay grounded in your voice. Don't ask for birth details — they are already in the NATAL CHART block above.`;
+
+async function sendOpeningReading() {
+    if (!apiKey || !loadNatalState()) return;
+    await sendMessage({ hiddenPrompt: OPENING_PROMPT });
+    const last = conversationHistory[conversationHistory.length - 1];
+    if (last?.role === 'assistant') renderOpeningChips();
+}
+
+function renderOpeningChips() {
+    removeOpeningChips();
+    const div = document.createElement('div');
+    div.id = 'openingChips';
+    div.className = 'opening-chips';
+    div.innerHTML = `
+        <button class="suggestion-chip" onclick="usePrompt('What\\'s my soul path?')">What's my soul path?</button>
+        <button class="suggestion-chip" onclick="usePrompt('What\\'s happening for me right now?')">What's happening for me right now?</button>
+        <button class="suggestion-chip" onclick="usePrompt('Tell me about my relationships')">Tell me about my relationships</button>
+    `;
+    chatMessagesDiv.appendChild(div);
+    div.scrollIntoView({ behavior: 'smooth', block: 'end' });
+}
+
+function removeOpeningChips() {
+    document.getElementById('openingChips')?.remove();
 }
 
 // ============================================================

@@ -758,6 +758,33 @@ button:disabled {
     border-color: rgba(200, 150, 255, 0.5);
 }
 
+/* Opening Reading Chips */
+.opening-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 4px 8px 16px;
+    margin-top: -4px;
+}
+
+.opening-chips .suggestion-chip {
+    padding: 8px 14px;
+    background: rgba(138, 43, 226, 0.2);
+    border: 1px solid rgba(200, 150, 255, 0.3);
+    border-radius: 8px;
+    font-size: 13px;
+    color: #a89acc;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+
+.opening-chips .suggestion-chip:hover {
+    background: rgba(138, 43, 226, 0.4);
+    color: #d4a5ff;
+    border-color: rgba(200, 150, 255, 0.5);
+}
+
 /* Casting Animation */
 .casting-animation {
     display: flex;
