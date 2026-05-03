@@ -691,7 +691,7 @@ async function sendMessage(opts = {}) {
         autoGrow();
         addMessage('user', message);
     }
-    conversationHistory.push({ role: 'user', content: message });
+    conversationHistory.push({ role: 'user', content: message, ...(hiddenPrompt ? { _hidden: true } : {}) });
     
     showThinking();
     sendBtn.disabled = true;
@@ -723,7 +723,7 @@ async function sendMessage(opts = {}) {
                 model: 'claude-sonnet-4-6',
                 max_tokens: 2048,
                 system: augmentedSystem,
-                messages: conversationHistory
+                messages: conversationHistory.map(({ _hidden, ...m }) => m)
             })
         });
         
@@ -853,7 +853,7 @@ function archiveCurrent() {
     if (!activeConsultationId || conversationHistory.length === 0) return;
     const store = loadConsultations();
     const now = new Date().toISOString();
-    const firstUser = conversationHistory.find(m => m.role === 'user');
+    const firstUser = conversationHistory.find(m => m.role === 'user' && !m._hidden);
     const title = firstUser
         ? (firstUser.content.length > 60 ? firstUser.content.slice(0, 60) + '…' : firstUser.content)
         : 'Untitled consultation';
