@@ -8,7 +8,6 @@ const sendBtn = document.getElementById('sendBtn');
 const setupModal = document.getElementById('setupModal');
 const apiKeyInput = document.getElementById('apiKeyInput');
 const setupInfo = document.getElementById('setupInfo');
-const examplePrompts = document.getElementById('examplePrompts');
 
 let conversationHistory = [];
 let apiKey = localStorage.getItem('anthropic_api_key');
@@ -31,10 +30,8 @@ function closeSetupModal() {
 function updateSetupBanner() {
     if (apiKey) {
         setupInfo.hidden = true;
-        examplePrompts.hidden = false;
     } else {
         setupInfo.hidden = false;
-        examplePrompts.hidden = true;
     }
 }
 

@@ -714,49 +714,6 @@ button:disabled {
     max-width: 280px;
 }
 
-/* Example Prompts */
-.example-prompts {
-    margin-top: 14px;
-    padding-top: 14px;
-    border-top: 1px dashed rgba(200, 150, 255, 0.2);
-}
-
-.example-prompts h4 {
-    font-size: 11px;
-    color: #806c99;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 8px;
-}
-
-.example-prompts ul {
-    list-style: none;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
-.example-prompts li {
-    margin: 0;
-}
-
-.example-prompts .prompt-btn {
-    display: inline-block;
-    padding: 6px 12px;
-    background: rgba(138, 43, 226, 0.2);
-    border: 1px solid rgba(200, 150, 255, 0.3);
-    border-radius: 6px;
-    font-size: 12px;
-    color: #a89acc;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.example-prompts .prompt-btn:hover {
-    background: rgba(138, 43, 226, 0.4);
-    color: #d4a5ff;
-    border-color: rgba(200, 150, 255, 0.5);
-}
 
 /* Opening Reading Chips */
 .opening-chips {
