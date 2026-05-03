@@ -653,7 +653,12 @@ function editBirthChart() {
 }
 
 function newConsultation() {
+    archiveCurrent();
     conversationHistory = [];
+    activeConsultationId = newConsultationId();
+    const store = loadConsultations();
+    store.activeId = activeConsultationId;
+    saveConsultations(store);
     renderWelcome();
     if (apiKey) {
         userInput.disabled = false;
@@ -732,11 +737,13 @@ async function sendMessage(opts = {}) {
         const assistantMessage = data.content[0].text;
         
         conversationHistory.push({ role: 'assistant', content: assistantMessage });
+        archiveCurrent();
         removeThinking();
         addMessage('assistant', assistantMessage);
     } catch (error) {
         removeThinking();
         conversationHistory.pop();
+        archiveCurrent();
         if (authFailure) {
             addMessage('assistant', `Your API key was rejected (${error.message}). Please re-enter it to continue.`);
             localStorage.removeItem('anthropic_api_key');
@@ -814,6 +821,126 @@ function loadNatalState() {
 
 function saveNatalState(state) {
     localStorage.setItem(NATAL_STORAGE_KEY, JSON.stringify(state));
+}
+
+// ============================================================
+// CONSULTATION HISTORY
+// ============================================================
+
+const CONSULTATIONS_KEY = 'copam_consultations';
+let activeConsultationId = null;
+
+function newConsultationId() {
+    return 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5);
+}
+
+function loadConsultations() {
+    try {
+        const raw = localStorage.getItem(CONSULTATIONS_KEY);
+        return raw ? JSON.parse(raw) : { activeId: null, consultations: [] };
+    } catch {
+        return { activeId: null, consultations: [] };
+    }
+}
+
+function saveConsultations(state) {
+    localStorage.setItem(CONSULTATIONS_KEY, JSON.stringify(state));
+}
+
+function archiveCurrent() {
+    if (!activeConsultationId || conversationHistory.length === 0) return;
+    const store = loadConsultations();
+    const now = new Date().toISOString();
+    const firstUser = conversationHistory.find(m => m.role === 'user');
+    const title = firstUser
+        ? (firstUser.content.length > 60 ? firstUser.content.slice(0, 60) + '…' : firstUser.content)
+        : 'Untitled consultation';
+    const idx = store.consultations.findIndex(c => c.id === activeConsultationId);
+    if (idx >= 0) {
+        store.consultations[idx] = { ...store.consultations[idx], updatedAt: now, title, messages: [...conversationHistory] };
+    } else {
+        store.consultations.push({ id: activeConsultationId, createdAt: now, updatedAt: now, title, messages: [...conversationHistory] });
+    }
+    store.activeId = activeConsultationId;
+    saveConsultations(store);
+}
+
+function renderConversation() {
+    const natalState = loadNatalState();
+    if (natalState) {
+        chatMessagesDiv.innerHTML = `
+            <div class="chart-pill" id="chartPill">
+                <span>✨ Chart cast for ${escapeHtml(natalState.birthLocal)}</span>
+                <button type="button" onclick="editBirthChart()">Edit</button>
+            </div>
+        `;
+    } else {
+        chatMessagesDiv.innerHTML = '';
+    }
+    conversationHistory.forEach(({ role, content }) => addMessage(role, content));
+}
+
+function loadConsultation(id) {
+    const store = loadConsultations();
+    const consultation = store.consultations.find(c => c.id === id);
+    if (!consultation) return;
+    conversationHistory = [...consultation.messages];
+    activeConsultationId = id;
+    store.activeId = id;
+    saveConsultations(store);
+    renderConversation();
+    closeHistoryDrawer();
+    renderHistoryList();
+}
+
+function deleteConsultation(id) {
+    if (!confirm('Delete this consultation?')) return;
+    const store = loadConsultations();
+    store.consultations = store.consultations.filter(c => c.id !== id);
+    if (store.activeId === id) {
+        store.activeId = null;
+        saveConsultations(store);
+        newConsultation();
+    } else {
+        saveConsultations(store);
+        renderHistoryList();
+    }
+}
+
+function relativeTime(iso) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+}
+
+function renderHistoryList() {
+    const list = document.querySelector('#historyDrawer .history-list');
+    if (!list) return;
+    const store = loadConsultations();
+    const sorted = [...store.consultations].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    list.innerHTML = sorted.length === 0
+        ? '<p class="history-empty">No past consultations yet.</p>'
+        : sorted.map(c => `
+            <div class="history-item ${c.id === activeConsultationId ? 'active' : ''}" onclick="loadConsultation('${escapeHtml(c.id)}')">
+                <div class="history-item-title">${escapeHtml(c.title)}</div>
+                <div class="history-item-meta">${relativeTime(c.updatedAt)}</div>
+                <button class="history-delete-btn" onclick="event.stopPropagation(); deleteConsultation('${escapeHtml(c.id)}')" title="Delete">✕</button>
+            </div>
+        `).join('');
+}
+
+function openHistoryDrawer() {
+    renderHistoryList();
+    document.getElementById('historyDrawer').classList.add('open');
+}
+
+function closeHistoryDrawer() {
+    document.getElementById('historyDrawer').classList.remove('open');
 }
 
 // ============================================================
@@ -1273,8 +1400,25 @@ userInput.addEventListener('keydown', (e) => {
     }
 });
 
-renderWelcome();
 updateSetupBanner();
+
+// Restore active consultation or start fresh
+(function initHistory() {
+    const store = loadConsultations();
+    const active = store.activeId
+        ? store.consultations.find(c => c.id === store.activeId)
+        : null;
+    if (active && active.messages.length > 0) {
+        conversationHistory = [...active.messages];
+        activeConsultationId = active.id;
+        renderConversation();
+    } else {
+        activeConsultationId = newConsultationId();
+        store.activeId = activeConsultationId;
+        saveConsultations(store);
+        renderWelcome();
+    }
+})();
 
 if (apiKey) {
     userInput.disabled = false;

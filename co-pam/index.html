@@ -10,6 +10,7 @@
 <body>
     <div class="container">
         <div class="header">
+            <button class="history-btn" onclick="openHistoryDrawer()">☰ History</button>
             <h1>✨ Cosmic Guidance</h1>
             <p>Personal Astrology Consultation inspired by Pam Gregory's Wisdom</p>
             <button class="new-chat-btn" id="newChatBtn" onclick="newConsultation()">New consultation</button>
@@ -31,6 +32,17 @@
                 ></textarea>
                 <button id="sendBtn" disabled>Send</button>
             </div>
+        </div>
+    </div>
+
+    <!-- History Drawer -->
+    <div id="historyDrawer">
+        <div class="history-panel">
+            <div class="history-header">
+                <span>Past Consultations</span>
+                <button class="history-close-btn" onclick="closeHistoryDrawer()">✕</button>
+            </div>
+            <div class="history-list"></div>
         </div>
     </div>
 
