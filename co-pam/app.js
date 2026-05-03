@@ -702,11 +702,13 @@ async function sendMessage(opts = {}) {
         const natalState = loadNatalState();
         const cosmicSnapshot = computeCosmicSnapshot();
         const natalBlock = natalState?.chart || '';
+        const transitsToNatal = computeTransitsToNatal(natalState);
         const knowledgeBase = await knowledgeBasePromise;
         const pieces = [SYSTEM_PROMPT];
         if (knowledgeBase) pieces.push(knowledgeBase);
         if (natalBlock) pieces.push(natalBlock);
         if (cosmicSnapshot) pieces.push(cosmicSnapshot);
+        if (transitsToNatal) pieces.push(transitsToNatal);
         const augmentedSystem = pieces.join('\n\n---\n\n');
         
         const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1130,6 +1132,68 @@ function computeCosmicSnapshot(date = new Date()) {
         return lines.join('\n');
     } catch (e) {
         console.warn('Cosmic snapshot failed:', e);
+        return '';
+    }
+}
+
+function computeNatalPositions(birthDate) {
+    return BODY_NAMES.map(name => ({
+        name, lon: geoLongitude(name, birthDate), retrograde: isRetrograde(name, birthDate)
+    }));
+}
+
+function detectCrossAspects(transitPositions, natalPositions, date) {
+    const found = [];
+    const later = new Date(date.getTime() + 6 * 3600 * 1000);
+    for (const t of transitPositions) {
+        const tLonLater = geoLongitude(t.name, later);
+        for (const n of natalPositions) {
+            const sepNow = angularSeparation(t.lon, n.lon);
+            const sepLater = angularSeparation(tLonLater, n.lon);
+            for (const asp of ASPECTS) {
+                const orb = Math.abs(sepNow - asp.angle);
+                if (orb <= ASPECT_ORB) {
+                    const orbLater = Math.abs(sepLater - asp.angle);
+                    found.push({
+                        transitName: t.name, transitRetrograde: t.retrograde,
+                        natalName: n.name, aspect: asp.name, glyph: asp.glyph,
+                        orb, motion: orbLater < orb ? 'applying' : 'separating'
+                    });
+                    break;
+                }
+            }
+        }
+    }
+    found.sort((x, y) => x.orb - y.orb);
+    return found;
+}
+
+function computeTransitsToNatal(natalState, date = new Date()) {
+    if (!natalState || typeof Astronomy === 'undefined') return '';
+    try {
+        const birthDate = localToUtc(natalState.dateStr, natalState.timeStr, natalState.tz);
+        const transitPositions = BODY_NAMES.map(name => ({
+            name, lon: geoLongitude(name, date), retrograde: isRetrograde(name, date)
+        }));
+        const natalPositions = computeNatalPositions(birthDate);
+        const aspects = detectCrossAspects(transitPositions, natalPositions, date);
+
+        const lines = [];
+        lines.push(`## TRANSITS TO NATAL (live, within ${ASPECT_ORB}° orb)`);
+        lines.push('');
+        lines.push('How today\'s sky is touching your natal chart right now:');
+        lines.push('');
+        if (aspects.length === 0) {
+            lines.push('*No major transits within 5° orb at this moment.*');
+        } else {
+            aspects.forEach(a => {
+                const retroFlag = a.transitRetrograde ? ' Rx' : '';
+                lines.push(`- **Transiting ${a.transitName}${retroFlag}** ${a.glyph} (${a.aspect}) **natal ${a.natalName}** — ${a.orb.toFixed(1)}° orb, ${a.motion}`);
+            });
+        }
+        return lines.join('\n');
+    } catch (e) {
+        console.warn('Transits-to-natal failed:', e);
         return '';
     }
 }
