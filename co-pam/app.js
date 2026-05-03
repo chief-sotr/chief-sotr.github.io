@@ -1237,12 +1237,15 @@ const knowledgeBasePromise = (async () => {
             if (!res.ok) throw new Error(`${path} -> HTTP ${res.status}`);
             return await res.text();
         }));
+        const MAX_KB_CHARS = 20000;
+        let combined = texts.join('\n\n---\n\n');
+        if (combined.length > MAX_KB_CHARS) combined = combined.slice(0, MAX_KB_CHARS) + '\n\n[KB truncated to fit token budget]';
         return [
             '## KNOWLEDGE BASE: PAM GREGORY TEACHINGS',
             '',
             'The following material is extracted from Pam Gregory transcripts. Draw on it for frameworks, metaphors, direct quotes, and depth. Stay in her voice.',
             '',
-            texts.join('\n\n---\n\n'),
+            combined,
         ].join('\n');
     } catch (e) {
         console.warn('Knowledge base load failed:', e);
