@@ -1291,6 +1291,7 @@ const KB_FILES = [
     'kb/pam_gregory_kb_2026_year_of_the_fire_horse.md',
     'kb/pam_gregory_kb_new_moon_taurus_may_2026.md',
     'kb/pam_gregory_kb_uranus_conjunct_sedna_2026.md',
+    'kb/pam_gregory_kb_2026_closing_door.md',
 ];
 
 const knowledgeBasePromise = (async () => {
