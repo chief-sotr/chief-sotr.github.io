@@ -879,7 +879,7 @@ function renderConversation() {
     } else {
         chatMessagesDiv.innerHTML = '';
     }
-    conversationHistory.forEach(({ role, content }) => addMessage(role, content));
+    conversationHistory.forEach(({ role, content, _hidden }) => { if (!_hidden) addMessage(role, content); });
 }
 
 function loadConsultation(id) {
