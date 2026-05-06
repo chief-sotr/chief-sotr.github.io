@@ -773,13 +773,12 @@ function autoGrow() {
 // OPENING READING
 // ============================================================
 
-const OPENING_PROMPT = `My chart has just been cast. Please give me a warm welcome reading in about 3 short paragraphs:
+const OPENING_PROMPT = `My chart has just been cast. Please give me a brief, warm welcome reading in about 2 short paragraphs:
 
-1. Name my Sun, Moon, and Rising signs and give a brief feel for each (one sentence each).
-2. Point out one thing that stands out in my chart — a notable placement, aspect, or pattern that catches your eye.
-3. Invite me to explore further with an open, warm question.
+1. In one or two sentences, name my Sun, Moon, and Rising signs and give a quick feel for the blend.
+2. Point out one thing that stands out in my chart and end with an open, warm question inviting me to explore further.
 
-Stay grounded in your voice. Don't ask for birth details — they are already in the NATAL CHART block above.`;
+Stay grounded in your voice. Keep it short — this is just the opening. Don't ask for birth details — they are already in the NATAL CHART block above.`;
 
 async function sendOpeningReading() {
     if (!apiKey || !loadNatalState()) return;
