@@ -5,54 +5,173 @@
 const chatMessagesDiv = document.getElementById('chatMessages');
 const userInput = document.getElementById('userInput');
 const sendBtn = document.getElementById('sendBtn');
-const setupModal = document.getElementById('setupModal');
-const apiKeyInput = document.getElementById('apiKeyInput');
-const setupInfo = document.getElementById('setupInfo');
 
 let conversationHistory = [];
 let apiKey = localStorage.getItem('anthropic_api_key');
-let demoMode = false;
+
+// ============================================================
+// STARFIELD — generated once on load, never re-rendered
+// ============================================================
+
+(function buildStarfield() {
+    function seededRandom(seed) {
+        let s = seed;
+        return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+    }
+    function generateStars(seed, count, layer) {
+        const r = seededRandom(seed);
+        const stars = [];
+        for (let i = 0; i < count; i++) {
+            stars.push({
+                x: r() * 100,
+                y: r() * 100,
+                size: layer === 'far' ? 1 : layer === 'mid' ? 1.5 + r() * 0.8 : 2 + r() * 1.5,
+                opacity: layer === 'far' ? 0.25 + r() * 0.3 : layer === 'mid' ? 0.4 + r() * 0.35 : 0.55 + r() * 0.45,
+            });
+        }
+        return stars;
+    }
+    const layers = [
+        { seed: 7,  count: 80, layer: 'far',  color: '#fff',    shadow: '' },
+        { seed: 31, count: 35, layer: 'mid',  color: '#e8d5ff', shadow: '0 0 2px rgba(232,213,255,0.4)' },
+        { seed: 53, count: 14, layer: 'near', color: '#fff',    shadow: '0 0 4px rgba(255,255,255,0.6), 0 0 8px rgba(179,157,219,0.3)' },
+    ];
+    const container = document.getElementById('starfield');
+    if (!container) return;
+    const frag = document.createDocumentFragment();
+    layers.forEach(({ seed, count, layer, color, shadow }) => {
+        generateStars(seed, count, layer).forEach(s => {
+            const el = document.createElement('div');
+            el.style.cssText = `position:absolute;left:${s.x}%;top:${s.y}%;width:${s.size}px;height:${s.size}px;border-radius:50%;background:${color};opacity:${s.opacity};pointer-events:none;${shadow ? 'box-shadow:' + shadow : ''}`;
+            frag.appendChild(el);
+        });
+    });
+    container.appendChild(frag);
+})();
+
+// ============================================================
+// SCREEN MANAGEMENT
+// ============================================================
+
+function showScreen(name) {
+    document.querySelectorAll('.screen').forEach(el => el.hidden = true);
+    const el = document.getElementById('screen-' + name);
+    if (el) el.hidden = false;
+}
+
+function setHeaderChat() {
+    document.getElementById('appHeader').innerHTML = `
+        <span class="header-title">✨ Consultation</span>
+        <div class="header-actions">
+            <button class="header-pill" onclick="openHistoryPanel()">history</button>
+            <button class="header-pill" onclick="openSettingsPanel()">⚙</button>
+        </div>
+    `;
+}
+
+function setHeaderSetup() {
+    document.getElementById('appHeader').innerHTML = `
+        <span class="header-title-center">✨ Cosmic Guidance</span>
+    `;
+}
 
 // ============================================================
 // SETUP & UI STATE
 // ============================================================
 
 function openSetupModal() {
-    apiKeyInput.value = apiKey || '';
-    setupModal.classList.add('open');
-    apiKeyInput.focus();
+    // In Cosmic Night, "open setup modal" means show the inline key bubble.
+    showSetupKeyBubble();
 }
 
-function closeSetupModal() {
-    setupModal.classList.remove('open');
-}
-
-function updateSetupBanner() {
-    if (apiKey) {
-        setupInfo.hidden = true;
-    } else {
-        setupInfo.hidden = false;
-    }
-}
-
-function saveApiKey() {
-    const key = apiKeyInput.value.trim();
-    if (!key) {
-        alert('Please enter a valid API key');
-        return;
-    }
-    localStorage.setItem('anthropic_api_key', key);
-    apiKey = key;
-    closeSetupModal();
-    updateSetupBanner();
-    userInput.disabled = false;
-    sendBtn.disabled = false;
-    userInput.focus();
-}
+function updateSetupBanner() { /* no-op — banner replaced by conversational setup */ }
 
 function usePrompt(prompt) {
     userInput.value = prompt;
-    sendMessage();
+    autoGrow();
+    userInput.focus();
+}
+
+// Inject the API-key bubble into the message stream.
+// forceNew=true clears existing messages first (e.g. from settings "Change key").
+function showSetupKeyBubble(forceNew = false) {
+    showScreen('app');
+    setHeaderSetup();
+    userInput.placeholder = 'waiting for setup…';
+    userInput.disabled = true;
+    sendBtn.disabled = true;
+    if (forceNew) chatMessagesDiv.innerHTML = '';
+    appendSetupBubble('welcome-greeting', `Welcome, beautiful soul ✨<br><br>Before we begin, I need two things to guide you well.`);
+    appendSetupBubble('key-form', `
+        <div>First — your Anthropic API key. It stays only on your device 🔒</div>
+        <input class="setup-input" id="inlineKeyInput" type="password" placeholder="sk-ant-api03-…" autocomplete="off">
+        <div class="setup-btn-row">
+            <button class="setup-btn-primary" onclick="saveKeyFromBubble()">Save key</button>
+            <a class="setup-btn-secondary" href="https://console.anthropic.com" target="_blank" rel="noopener">Get a key →</a>
+        </div>
+        <div id="inlineKeyError" style="color:#ff8aa5;font-size:11px;margin-top:6px;min-height:14px;"></div>
+    `);
+    document.getElementById('inlineKeyInput')?.focus();
+}
+
+function saveKeyFromBubble() {
+    const input = document.getElementById('inlineKeyInput');
+    const errEl = document.getElementById('inlineKeyError');
+    if (!input) return;
+    const key = input.value.trim();
+    if (!key) { if (errEl) errEl.textContent = 'Please enter your API key.'; return; }
+    localStorage.setItem('anthropic_api_key', key);
+    apiKey = key;
+    appendSetupBubble('key-saved', `Perfect, your key is saved ✓`);
+    showSetupBirthBubble();
+}
+
+function showSetupBirthBubble() {
+    const hasChart = !!loadNatalState();
+    if (hasChart) {
+        transitionToChat();
+        return;
+    }
+    appendSetupBubble('birth-form-wrapper', `
+        <div style="margin-bottom:10px;">Now, to read you properly — when and where were you born?</div>
+        ${birthFormHtml()}
+    `);
+    attachBirthFormHandlers();
+}
+
+// Appends a single assistant-style bubble to chatMessages.
+function appendSetupBubble(id, html) {
+    const existing = document.getElementById('setup-bubble-' + id);
+    if (existing) return;
+    const msg = document.createElement('div');
+    msg.className = 'message assistant';
+    msg.id = 'setup-bubble-' + id;
+    const content = document.createElement('div');
+    content.className = 'message-content';
+    content.innerHTML = html;
+    msg.appendChild(content);
+    chatMessagesDiv.appendChild(msg);
+    msg.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function transitionToChat() {
+    showScreen('app');
+    setHeaderChat();
+    userInput.placeholder = 'Ask anything…';
+    userInput.disabled = !apiKey;
+    sendBtn.disabled = !apiKey;
+    if (apiKey) userInput.focus();
+}
+
+function openSettingsPanel() {
+    const chartRow = document.getElementById('settingsChartRow');
+    if (chartRow) chartRow.style.display = loadNatalState() ? '' : 'none';
+    document.getElementById('settingsPanel').classList.add('open');
+}
+
+function closeSettingsPanel(e) {
+    if (e && e.target !== document.getElementById('settingsPanel')) return;
+    document.getElementById('settingsPanel').classList.remove('open');
 }
 
 // ============================================================
@@ -60,117 +179,42 @@ function usePrompt(prompt) {
 // ============================================================
 
 function renderWelcome() {
+    transitionToChat();
     const natalState = loadNatalState();
-    
     if (natalState) {
         chatMessagesDiv.innerHTML = `
             <div class="chart-pill" id="chartPill">
                 <span>\u2728 Chart cast for ${escapeHtml(natalState.birthLocal)}</span>
                 <button type="button" onclick="editBirthChart()">Edit</button>
             </div>
-            <div id="welcome" style="text-align: center; padding-top: 10px;">
-                <div class="emoji">🌟✨</div>
-                <p style="color: #80ff9a; font-size: 13px; margin-bottom: 4px;">\u2713 Your chart is ready!</p>
-                <h2>What would you like to explore today?</h2>
-                <p style="font-size: 13px; color: #a89acc; line-height: 1.6; max-width: 460px; margin: 0 auto;">
-                    Ask me about your placements, today's transits, or what's brewing in the cosmic weather. 
-                    I'll read from your natal chart as the source of truth.
-                </p>
-            </div>
         `;
     } else {
-        chatMessagesDiv.innerHTML = `
-            <div id="welcome">
-                <div class="emoji">\ud83c\udf1f</div>
-                <h2>Welcome to your astrology consultation</h2>
-                <p>
-                    I'm here to help you explore your cosmic path. To get started, share your birth details 
-                    (date, time, and location) below, or click "Show me how" to see a sample consultation.
-                </p>
-                <button class="show-me-how-btn" onclick="startDemo()">
-                    <span>\u2728</span> Show me how it works
-                </button>
-                <div class="trust-badge">
-                    Your data stays private &mdash; only you can see it
-                </div>
-            </div>
-            ${birthFormHtml()}
-        `;
+        chatMessagesDiv.innerHTML = '';
+        appendSetupBubble('birth-prompt', `To give you a personal reading, I need your birth details \u2014 when and where were you born?`);
+        const formWrap = document.createElement('div');
+        formWrap.className = 'message assistant';
+        formWrap.id = 'setup-bubble-birth-form-wrapper';
+        const content = document.createElement('div');
+        content.className = 'message-content';
+        content.innerHTML = birthFormHtml();
+        formWrap.appendChild(content);
+        chatMessagesDiv.appendChild(formWrap);
         attachBirthFormHandlers();
     }
 }
 
-// ============================================================
-// DEMO MODE
-// ============================================================
-
-function startDemo() {
-    demoMode = true;
+function beginJourney() {
     chatMessagesDiv.innerHTML = '';
-    document.getElementById('welcome')?.remove();
-    
-    addDemoMessage('assistant', "Welcome, curious soul! I'm here to help you explore your cosmic path. To get started, share your birth details — your date, time, and location. This helps me cast your unique natal chart.");
-    
-    setTimeout(() => {
-        addDemoMessage('user', "What do you need from me exactly?");
-    }, 1200);
-    
-    setTimeout(() => {
-        addDemoMessage('assistant', "I need your birth date, time (as exact as possible), and location. For example: June 15, 1985 at 3:30 PM in San Francisco, California. The time is especially important — your rising sign changes roughly every 4 minutes!");
-    }, 2200);
-    
-    setTimeout(() => {
-        addDemoMessage('user', "Okay, I was born on March 22, 1980 at 14:30 in Paris, France.");
-    }, 3800);
-    
-    setTimeout(() => {
-        addDemoMessage('assistant', "Thank you! *Casting your chart...* \u2728\n\nYour chart shows a fascinating configuration: Sun in Aries, Moon in Cancer, and a powerful stellium in Pisces. Your Ascendant is in Leo, giving you a warm, radiant presence that draws people in naturally.\n\nWhat would you like to explore about your path today?");
-    }, 5000);
-    
-    setTimeout(() => {
-        addDemoMessage('user', "What should I focus on this year?");
-    }, 6800);
-    
-    setTimeout(() => {
-        addDemoMessage('assistant', "With your Aries Sun and Pluto in your 10th house, this is a powerful year for career transformation. The cosmic weather shows Saturn forming a harmonious trine to your natal Mars — this is your invitation to step into leadership with discipline and courage.\n\nThe question is: What kind of leader do YOU want to be? The energy is available. How will you choose to work with it?");
-    }, 8200);
-    
-    setTimeout(() => {
-        const demoEnd = document.createElement('div');
-        demoEnd.style.textAlign = 'center';
-        demoEnd.style.padding = '20px';
-        demoEnd.innerHTML = `
-            <p style="color: #80ff9a; margin-bottom: 16px;">That's how a consultation flows!</p>
-            <button onclick="endDemo()" style="padding: 12px 24px; font-size: 14px;">
-                Ready to try it yourself?
-            </button>
-        `;
-        chatMessagesDiv.appendChild(demoEnd);
-        demoEnd.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 10500);
+    showSetupKeyBubble();
 }
 
-function addDemoMessage(role, content) {
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${role} demo-message`;
-    
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'message-content';
-    contentDiv.innerHTML = renderMarkdown(content);
-    
-    messageDiv.appendChild(contentDiv);
-    chatMessagesDiv.appendChild(messageDiv);
-    messageDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function endDemo() {
-    demoMode = false;
-    renderWelcome();
-    if (apiKey) {
-        userInput.disabled = false;
-        sendBtn.disabled = false;
-        userInput.focus();
-    }
+function skipBirthChart() {
+    document.getElementById('setup-bubble-birth-prompt')?.remove();
+    document.getElementById('setup-bubble-birth-form-wrapper')?.remove();
+    document.getElementById('setup-bubble-edit-birth-form')?.remove();
+    transitionToChat();
+    chatMessagesDiv.innerHTML = '';
+    userInput.focus();
 }
 
 // ============================================================
@@ -341,6 +385,7 @@ function birthFormHtml(prefill = {}) {
             </div>
             
             <button type="submit" class="cast-btn" id="castBtn" ${castDisabled}>Cast my chart \u2728</button>
+            <button type="button" class="manual-fallback-toggle" style="margin-top:10px;display:block;text-align:center;width:100%;" onclick="skipBirthChart()">Skip for now</button>
             <div class="form-error" id="birthFormError"></div>
             <div class="attribution">Location search powered by <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> &middot; timezone via <a href="https://timeapi.io" target="_blank" rel="noopener">timeapi.io</a></div>
         </form>
@@ -455,27 +500,22 @@ function attachBirthFormHandlers(prefill = {}) {
             birthDate = localToUtc(dateStr, timeStr, tz);
             chart = computeNatalChart(birthDate, lat, lon, dateStr, timeStr, tz);
         } catch (err) {
-            // Re-render form with error displayed
-            const prefill = {
-                date: dateStr,
-                time: timeStr,
-                tz,
-                lat,
-                lon,
-                locationQuery: state.query,
-                locationDisplayName: displayName
-            };
-            chatMessagesDiv.innerHTML = `
-                <div id="welcome" style="text-align: center; padding-top: 10px;">
-                    <p style="color: #d4a5ff; font-weight: 500;">Edit your birth details</p>
-                </div>
-                ${birthFormHtml(prefill)}
-            `;
+            // Show error inline in the form
+            form.querySelector('#birthFormError').textContent = err.message || String(err);
+            chatMessagesDiv.innerHTML = '';
+            const formWrap = document.createElement('div');
+            formWrap.className = 'message assistant';
+            const cnt = document.createElement('div');
+            cnt.className = 'message-content';
+            const prefill = { date: dateStr, time: timeStr, tz, lat, lon, locationQuery: state.query, locationDisplayName: displayName };
+            cnt.innerHTML = birthFormHtml(prefill);
+            formWrap.appendChild(cnt);
+            chatMessagesDiv.appendChild(formWrap);
             attachBirthFormHandlers(prefill);
             document.querySelector('#birthFormError').textContent = err.message || String(err);
             return;
         }
-        
+
         const saved = {
             dateStr, timeStr, tz, lat, lon,
             isoUtc: birthDate.toISOString(),
@@ -486,11 +526,6 @@ function attachBirthFormHandlers(prefill = {}) {
         };
         saveNatalState(saved);
         renderWelcome();
-        if (apiKey) {
-            userInput.disabled = false;
-            sendBtn.disabled = false;
-        }
-        userInput.focus();
         sendOpeningReading();
     });
     
@@ -633,6 +668,7 @@ function applyManualCoordinates(formEl) {
 }
 
 function editBirthChart() {
+    transitionToChat();
     const state = loadNatalState() || {};
     const prefill = {
         date: state.dateStr,
@@ -643,16 +679,21 @@ function editBirthChart() {
         locationQuery: state.locationQuery,
         locationDisplayName: state.locationDisplayName
     };
-    chatMessagesDiv.innerHTML = `
-        <div id="welcome" style="text-align: center; padding-top: 10px;">
-            <p style="color: #d4a5ff; font-weight: 500;">Edit your birth details</p>
-        </div>
-        ${birthFormHtml(prefill)}
-    `;
+    chatMessagesDiv.innerHTML = '';
+    appendSetupBubble('edit-birth-prompt', `Let's update your birth details.`);
+    const formWrap = document.createElement('div');
+    formWrap.className = 'message assistant';
+    formWrap.id = 'setup-bubble-edit-birth-form';
+    const content = document.createElement('div');
+    content.className = 'message-content';
+    content.innerHTML = birthFormHtml(prefill);
+    formWrap.appendChild(content);
+    chatMessagesDiv.appendChild(formWrap);
     attachBirthFormHandlers(prefill);
 }
 
 function newConsultation() {
+    closeHistoryPanel();
     archiveCurrent();
     conversationHistory = [];
     activeConsultationId = newConsultationId();
@@ -660,11 +701,6 @@ function newConsultation() {
     store.activeId = activeConsultationId;
     saveConsultations(store);
     renderWelcome();
-    if (apiKey) {
-        userInput.disabled = false;
-        sendBtn.disabled = false;
-        userInput.focus();
-    }
     if (loadNatalState()) sendOpeningReading();
 }
 
@@ -684,6 +720,10 @@ async function sendMessage(opts = {}) {
     if (!message) return;
 
     document.getElementById('welcome')?.remove();
+    // Remove birth form bubbles if user starts chatting without completing setup
+    document.getElementById('setup-bubble-birth-prompt')?.remove();
+    document.getElementById('setup-bubble-birth-form-wrapper')?.remove();
+    document.getElementById('setup-bubble-edit-birth-form')?.remove();
     removeOpeningChips();
 
     if (!hiddenPrompt) {
@@ -747,13 +787,10 @@ async function sendMessage(opts = {}) {
         conversationHistory.pop();
         archiveCurrent();
         if (authFailure) {
-            addMessage('assistant', `Your API key was rejected (${error.message}). Please re-enter it to continue.`);
             localStorage.removeItem('anthropic_api_key');
-            const badKey = apiKey;
             apiKey = null;
-            updateSetupBanner();
-            openSetupModal();
-            apiKeyInput.value = badKey || '';
+            addMessage('assistant', `I couldn't reach the cosmos with that key. Mind double-checking?`);
+            showSetupKeyBubble(false);
         } else {
             addMessage('assistant', `I apologize, but I encountered an issue: ${error.message}. Please try again.`);
         }
@@ -867,6 +904,7 @@ function archiveCurrent() {
 }
 
 function renderConversation() {
+    transitionToChat();
     const natalState = loadNatalState();
     if (natalState) {
         chatMessagesDiv.innerHTML = `
@@ -890,7 +928,7 @@ function loadConsultation(id) {
     store.activeId = id;
     saveConsultations(store);
     renderConversation();
-    closeHistoryDrawer();
+    closeHistoryPanel();
     renderHistoryList();
 }
 
@@ -920,29 +958,43 @@ function relativeTime(iso) {
 }
 
 function renderHistoryList() {
-    const list = document.querySelector('#historyDrawer .history-list');
+    const list = document.getElementById('historyList');
     if (!list) return;
     const store = loadConsultations();
     const sorted = [...store.consultations].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-    list.innerHTML = sorted.length === 0
-        ? '<p class="history-empty">No past consultations yet.</p>'
-        : sorted.map(c => `
+    if (sorted.length === 0) {
+        list.innerHTML = '<p class="history-empty">No past consultations yet.</p>';
+        return;
+    }
+    list.innerHTML = sorted.map(c => {
+        const firstAsst = c.messages.find(m => m.role === 'assistant' && !m._hidden);
+        const preview = firstAsst
+            ? firstAsst.content.replace(/[#*`]/g, '').slice(0, 80)
+            : '';
+        return `
             <div class="history-item ${c.id === activeConsultationId ? 'active' : ''}" onclick="loadConsultation('${escapeHtml(c.id)}')">
-                <div class="history-item-title">${escapeHtml(c.title)}</div>
-                <div class="history-item-meta">${relativeTime(c.updatedAt)}</div>
+                <div class="history-item-top">
+                    <div class="history-item-title">${escapeHtml(c.title)}</div>
+                    <div class="history-item-meta">${relativeTime(c.updatedAt)}</div>
+                </div>
+                ${preview ? `<div class="history-item-preview">${escapeHtml(preview)}</div>` : ''}
                 <button class="history-delete-btn" onclick="event.stopPropagation(); deleteConsultation('${escapeHtml(c.id)}')" title="Delete">✕</button>
             </div>
-        `).join('');
+        `;
+    }).join('');
 }
 
-function openHistoryDrawer() {
+function openHistoryPanel() {
     renderHistoryList();
-    document.getElementById('historyDrawer').classList.add('open');
+    document.getElementById('historyPanel').classList.add('open');
 }
 
-function closeHistoryDrawer() {
-    document.getElementById('historyDrawer').classList.remove('open');
+function closeHistoryPanel() {
+    document.getElementById('historyPanel')?.classList.remove('open');
 }
+
+function openHistoryDrawer() { openHistoryPanel(); }
+function closeHistoryDrawer() { closeHistoryPanel(); }
 
 // ============================================================
 // LOCATION SEARCH
@@ -1467,29 +1519,39 @@ userInput.addEventListener('keydown', (e) => {
     }
 });
 
-updateSetupBanner();
-
-// Restore active consultation or start fresh
-(function initHistory() {
+// Restore active consultation or route to correct screen
+(function initApp() {
+    const hasKey = !!apiKey;
+    const hasChart = !!loadNatalState();
     const store = loadConsultations();
     const active = store.activeId
         ? store.consultations.find(c => c.id === store.activeId)
         : null;
+
     if (active && active.messages.length > 0) {
+        // Returning user with a saved session
         conversationHistory = [...active.messages];
         activeConsultationId = active.id;
-        renderConversation();
+        if (!hasKey) {
+            // Unusual: session exists but key was cleared — re-enter key flow
+            showSetupKeyBubble(false);
+        } else {
+            renderConversation();
+        }
+    } else if (!hasKey && !hasChart) {
+        // True first-run: show the welcome screen
+        showScreen('welcome');
+    } else if (!hasKey) {
+        // Has chart but no key (e.g. key was manually cleared)
+        activeConsultationId = newConsultationId();
+        store.activeId = activeConsultationId;
+        saveConsultations(store);
+        showSetupKeyBubble(false);
     } else {
+        // Has key, no active session — go to chat, offer birth form if no chart
         activeConsultationId = newConsultationId();
         store.activeId = activeConsultationId;
         saveConsultations(store);
         renderWelcome();
     }
 })();
-
-if (apiKey) {
-    userInput.disabled = false;
-    sendBtn.disabled = false;
-} else {
-    openSetupModal();
-}

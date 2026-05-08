@@ -3,70 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Co-Pam - Cosmic Guidance</title>
+    <title>Co-Pam — Cosmic Guidance</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <button class="history-btn" onclick="openHistoryDrawer()">☰ History</button>
-            <h1>✨ Cosmic Guidance</h1>
-            <p>Personal Astrology Consultation inspired by Pam Gregory's Wisdom</p>
-            <button class="new-chat-btn" id="newChatBtn" onclick="newConsultation()">New consultation</button>
-        </div>
+    <!-- Persistent starfield — rendered once by JS on load, never re-rendered -->
+    <div class="starfield" id="starfield"></div>
 
+    <!-- Welcome screen (first-run: no key and no chart) -->
+    <div id="screen-welcome" class="screen" hidden>
+        <div class="welcome-center">
+            <div class="welcome-sparkle">✨</div>
+            <div class="welcome-title">Cosmic Guidance</div>
+            <div class="welcome-subtitle">Your personal astrology consultation<br>inspired by Pam Gregory</div>
+        </div>
+        <div class="welcome-bottom">
+            <button class="btn-primary" onclick="beginJourney()">Begin my journey →</button>
+            <div class="welcome-helper">takes about 2 min to set up</div>
+        </div>
+    </div>
+
+    <!-- App shell — shared by setup screens and chat -->
+    <div id="screen-app" class="screen" hidden>
+        <div class="app-header" id="appHeader"></div>
         <div class="chat-messages" id="chatMessages"></div>
-
-        <div class="input-area">
-            <div class="setup-info" id="setupInfo" hidden>
-                <span id="setupInfoText"><strong>⚙️ Setup required:</strong> This chatbot needs a valid Anthropic API key to function.</span>
-                <a onclick="openSetupModal(); return false;">Click here to enter your API key</a>
+        <div class="input-bar">
+            <div class="input-wrapper">
+                <textarea id="userInput" rows="2" placeholder="Ask anything..." disabled></textarea>
             </div>
-            <div class="input-group">
-                <textarea
-                    id="userInput"
-                    rows="2"
-                    placeholder="Share your birth details or what brought you here..."
-                    disabled
-                ></textarea>
-                <button id="sendBtn" disabled>Send</button>
+            <button id="sendBtn" class="send-btn" disabled aria-label="Send">→</button>
+        </div>
+    </div>
+
+    <!-- History panel (slides up from bottom) -->
+    <div id="historyPanel" class="history-panel-overlay">
+        <div class="history-panel-inner">
+            <div class="history-panel-header">
+                <span class="history-panel-title">Past consultations</span>
+                <button class="header-pill" onclick="closeHistoryPanel()">← back</button>
+            </div>
+            <div class="history-list" id="historyList"></div>
+            <div class="history-panel-footer">
+                <button class="btn-primary" onclick="newConsultation()">+ New consultation</button>
             </div>
         </div>
     </div>
 
-    <!-- History Drawer -->
-    <div id="historyDrawer">
-        <div class="history-panel">
-            <div class="history-header">
-                <span>Past Consultations</span>
-                <button class="history-close-btn" onclick="closeHistoryDrawer()">✕</button>
+    <!-- Settings panel (slides up from bottom) -->
+    <div id="settingsPanel" class="settings-panel-overlay" onclick="closeSettingsPanel(event)">
+        <div class="settings-panel">
+            <div class="settings-title">Settings</div>
+            <div class="settings-row">
+                <span class="settings-row-label">🔑 API key</span>
+                <button class="settings-row-action" onclick="closeSettingsPanel(); showSetupKeyBubble(true)">Change →</button>
             </div>
-            <div class="history-list"></div>
-        </div>
-    </div>
-
-    <!-- Setup Modal -->
-    <div id="setupModal">
-        <div class="modal-content">
-            <h2>🔑 Connect to AI</h2>
-            <p>
-                To receive personalized astrological guidance, enter your Anthropic API key. 
-                Your key is stored only in your browser's local storage &mdash; never sent anywhere else.
-            </p>
-            <input 
-                type="password" 
-                id="apiKeyInput" 
-                class="modal-input"
-                placeholder="sk-ant-..."
-            />
-            <div class="modal-buttons">
-                <button onclick="saveApiKey()">Save &amp; Connect</button>
-                <button onclick="closeSetupModal()">Cancel</button>
+            <div class="settings-row" id="settingsChartRow">
+                <span class="settings-row-label">✨ Birth chart</span>
+                <button class="settings-row-action" onclick="closeSettingsPanel(); editBirthChart()">Edit →</button>
             </div>
-            <div class="modal-footer">
-                Get an API key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>
-            </div>
+            <button class="settings-close" onclick="closeSettingsPanel()">Close</button>
         </div>
     </div>
 
