@@ -382,7 +382,7 @@ html, body {
     border: none;
     color: var(--text-body);
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: 16px; /* prevent iOS zoom */
     line-height: 1.5;
     padding: 7px 11px;
     resize: none;
@@ -545,7 +545,7 @@ html, body {
     padding: 8px 10px;
     color: var(--text-body);
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: 16px; /* prevent iOS zoom */
     margin-top: 8px;
 }
 
