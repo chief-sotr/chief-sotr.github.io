@@ -88,6 +88,10 @@
         if (e.target.matches('textarea, input')) {
           setTimeout(function() {
             e.target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            if (e.target.id === 'userInput') {
+              var msgs = document.getElementById('chatMessages');
+              if (msgs) msgs.scrollTop = msgs.scrollHeight;
+            }
           }, 300);
         }
       });
