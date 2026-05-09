@@ -74,15 +74,15 @@
       if (!window.visualViewport) return;
       var root = document.documentElement;
 
-      function updateKeyboardOffset() {
+      function updateAppViewport() {
         var vv = window.visualViewport;
-        var offset = window.innerHeight - vv.height - vv.offsetTop;
-        root.style.setProperty('--keyboard-offset', Math.max(0, offset) + 'px');
+        root.style.setProperty('--app-height', vv.height + 'px');
+        root.style.setProperty('--app-top', vv.offsetTop + 'px');
       }
 
-      window.visualViewport.addEventListener('resize', updateKeyboardOffset);
-      window.visualViewport.addEventListener('scroll', updateKeyboardOffset);
-      updateKeyboardOffset();
+      window.visualViewport.addEventListener('resize', updateAppViewport);
+      window.visualViewport.addEventListener('scroll', updateAppViewport);
+      updateAppViewport();
 
       document.addEventListener('focusin', function(e) {
         if (e.target.matches('textarea, input')) {

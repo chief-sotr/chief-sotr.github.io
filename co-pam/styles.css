@@ -79,12 +79,15 @@ html, body {
 
 .screen[hidden] { display: none; }
 
-/* Chat shell must track the visual viewport so it shrinks when the iOS keyboard opens.
-   Override the base .screen's bottom: 0 (from inset: 0) with explicit dvh height. */
+/* Chat shell tracks the visual viewport so it shrinks when the iOS keyboard opens.
+   --app-height and --app-top are written by the visualViewport listener in index.html;
+   dvh and vh are fallbacks for when JS hasn't run yet or isn't supported. */
 #screen-app {
     bottom: auto;
-    height: 100vh;    /* fallback for older browsers */
-    height: 100dvh;   /* shrinks when soft keyboard opens — Safari 15.4+ */
+    top: var(--app-top, 0px);
+    height: 100vh;                      /* fallback for very old browsers */
+    height: 100dvh;                     /* fallback when JS hasn't run yet */
+    height: var(--app-height, 100dvh);  /* preferred — matches visual viewport exactly */
 }
 
 /* ============================================================
@@ -364,9 +367,6 @@ html, body {
     background: var(--surface-header);
     backdrop-filter: var(--blur-header);
     -webkit-backdrop-filter: var(--blur-header);
-    transform: translateY(calc(-1 * var(--keyboard-offset, 0px)));
-    transition: transform 150ms ease-out;
-    will-change: transform;
 }
 
 .input-wrapper {
