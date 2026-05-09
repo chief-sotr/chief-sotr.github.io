@@ -69,5 +69,29 @@
     </div>
 
     <script src="app.js"></script>
+    <script>
+    (function() {
+      if (!window.visualViewport) return;
+      var root = document.documentElement;
+
+      function updateKeyboardOffset() {
+        var vv = window.visualViewport;
+        var offset = window.innerHeight - vv.height - vv.offsetTop;
+        root.style.setProperty('--keyboard-offset', Math.max(0, offset) + 'px');
+      }
+
+      window.visualViewport.addEventListener('resize', updateKeyboardOffset);
+      window.visualViewport.addEventListener('scroll', updateKeyboardOffset);
+      updateKeyboardOffset();
+
+      document.addEventListener('focusin', function(e) {
+        if (e.target.matches('textarea, input')) {
+          setTimeout(function() {
+            e.target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }, 300);
+        }
+      });
+    })();
+    </script>
 </body>
 </html>
